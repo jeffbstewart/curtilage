@@ -48,15 +48,21 @@ jobs:
       # Protobuf schema: lint, and never a breaking change against main.
       # The API is the contract between every household's server and
       # the app they installed; additive changes only (DESIGN.md).
+      # breaking needs protos on main to compare against; the very first
+      # schema PR has none, so it is skipped exactly then.
+      - name: Does main have protos yet?
+        id: base
+        run: echo "has=$(git ls-tree -r origin/main --name-only -- proto | grep -c '.proto$' || true)" >> "$GITHUB_OUTPUT"
       - uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3 # v1.5.0, resolved 2026-08-29
         with:
           input: proto
           lint: true
-          breaking: ${{ github.event_name == 'pull_request' }}
+          breaking: ${{ github.event_name == 'pull_request' && steps.base.outputs.has != '0' }}
           breaking_against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
           format: true
           push: false
           archive: false
+          pr_comment: false   # would need pull-requests: write; CI stays read-only
 
       # Secret scan over the whole tree (diff from the empty tree), plus
       # the scanner's own tests.  Same checker as the sibling repos.
