@@ -1,0 +1,12 @@
+# The API contract between every household's server and the app they
+# installed (docs/DESIGN.md).  Lint at STANDARD; breaking changes
+# against main are a CI failure -- additive only, forever.
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

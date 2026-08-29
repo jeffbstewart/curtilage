@@ -1,0 +1,5 @@
+module github.com/jeffbstewart/curtilage
+
+go 1.26
+
+toolchain go1.26.7

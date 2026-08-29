@@ -1,0 +1,30 @@
+// Curtilage API, v1.  The contract between a household's server and
+// the app (docs/DESIGN.md "Presentation").  Additive changes only:
+// buf breaking runs against main in CI.
+//
+// Only the handshake exists yet; the rest arrives with the phases.
+syntax = "proto3";
+
+package curtilage.v1;
+
+option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
+
+// ServerInfo lets an app say "your server is too old" gracefully, and
+// tells it which features this server offers before it asks for them.
+service CurtilageService {
+  rpc GetServerInfo(GetServerInfoRequest) returns (GetServerInfoResponse);
+}
+
+message GetServerInfoRequest {}
+
+message GetServerInfoResponse {
+  // Server version, e.g. "0.1.0".
+  string version = 1;
+  // Lowest app API version this server still speaks.
+  uint32 min_api_version = 2;
+  // The API version this server implements.
+  uint32 api_version = 3;
+  // Human-readable name of this installation (never a hostname the
+  // app should connect to; that comes from enrolment).
+  string display_name = 4;
+}

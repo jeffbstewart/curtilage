@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# curtilage
+/curtilage
+/curtilage.exe
+lifecycle/presubmit-personal-patterns.txt

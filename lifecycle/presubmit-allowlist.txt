@@ -1,0 +1,14 @@
+# Presubmit allowlist -- one pattern per line.
+# Lines containing any of these substrings are excluded from violation
+# reports; "file:<name>" skips a whole file.  Comments start with #.
+# This repo is PUBLIC: keep this list short and justified.
+
+# go.sum module hashes are base64, not hex, and never secrets.
+file:go.sum
+# The checker and its tests contain example IPs/keys by nature.
+file:presubmit-check.sh
+file:presubmit-check-test.sh
+# Supply-chain pins ARE long hex by design: action commit SHAs in the
+# workflow, image digests in the Dockerfile.
+file:ci.yml
+file:Dockerfile

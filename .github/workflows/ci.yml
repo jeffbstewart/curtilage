@@ -1,0 +1,78 @@
+# The presubmit suite (cloister docs/grange.md R3): the "verify" check
+# the main ruleset requires.  Zero secrets by policy (R6) -- the forge
+# lint audits Actions secrets to empty.
+#
+# Supply chain: actions are pinned by commit SHA (not floating major
+# tags), go.sum is enforced (-mod=readonly: a missing or mismatched
+# module hash is a build error, never a silent re-resolve), and
+# govulncheck flags known vulns in dependencies without anyone having
+# to remember.  Image builds (pinned by digest) come with the first
+# Dockerfile.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -mod=readonly
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, resolved 2026-08-27
+        with:
+          fetch-depth: 0   # buf breaking compares against main
+
+      - name: ASCII
+        run: sh lifecycle/check-ascii.sh
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5, resolved 2026-08-27
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      # Protobuf schema: lint, and never a breaking change against main.
+      # The API is the contract between every household's server and
+      # the app they installed; additive changes only (DESIGN.md).
+      - uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3 # v1.5.0, resolved 2026-08-29
+        with:
+          input: proto
+          lint: true
+          breaking: ${{ github.event_name == 'pull_request' }}
+          breaking_against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
+          format: true
+          push: false
+          archive: false
+
+      # Secret scan over the whole tree (diff from the empty tree), plus
+      # the scanner's own tests.  Same checker as the sibling repos.
+      - name: Secret scan
+        run: git diff "$(git hash-object -t tree /dev/null)" HEAD | bash lifecycle/presubmit-check.sh
+      - name: Secret scan self-test
+        run: bash lifecycle/presubmit-check-test.sh
+
+      # The forge's own merge-path protections (cloister docs/grange.md
+      # R1-R8), asserted against this repo's pinned expectations.  The
+      # workflow token cannot read collaborator roles or Actions secrets,
+      # so those report UNVERIFIED (-allow-unverified downgrades them to
+      # warnings); the operator runs the same lint with an admin token
+      # for the full verdict.  Any readable rule that drifts still fails
+      # the PR.
+      - name: Forge lint (merge-path protections)
+        env:
+          FORGE_LINT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run github.com/jeffbstewart/cloister/cmd/forge-lint@main -config .github/forge-lint.yaml -allow-unverified
