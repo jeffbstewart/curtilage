@@ -11,4 +11,20 @@ Home Assistant to the internet.
 
 Status: design.  See [docs/DESIGN.md](docs/DESIGN.md).
 
+## Development
+
+Go 1.26 (the `toolchain` directive pins the release), protobuf schema
+under `proto/` (buf, STANDARD lint, breaking changes against `main`
+fail CI), the iOS app under `ios/` when it exists.  7-bit ASCII, LF
+line endings, no dependencies that a reader cannot audit.
+
+    sh lifecycle/presubmit.sh        # every local check, in CI order
+    sh lifecycle/install-hooks.sh    # secret scan as the pre-commit hook
+
+CI (`verify`): ASCII, gofmt, vet, test, govulncheck, buf lint/format/
+breaking, the secret scan and its self-test, and forge-lint (the
+merge-path protections).  Actions are pinned by commit SHA, go.sum is
+enforced (`-mod=readonly`), images (later) by digest.  Work happens on
+`agent/` branches via pull request; only the operator merges.
+
 Apache-2.0.
