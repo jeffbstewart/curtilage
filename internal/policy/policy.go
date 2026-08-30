@@ -62,6 +62,58 @@ type Event struct {
 // Running reports whether the event has not ended.
 func (e Event) Running() bool { return e.EndedAt.IsZero() }
 
+// Audience is who an event is (or would be) delivered to.  Delivery
+// does not exist yet; this is the verdict the house page shows so the
+// rules can be tuned against real days before anything is pushed.
+// Quiet rules and per-person routing will refine it (docs/DESIGN.md
+// "Policy").
+func Audience(k Kind) string {
+	switch k {
+	case KindArrival, KindDeparture, KindPackage:
+		return "household"
+	case KindDetection:
+		return "nobody (list only)"
+	}
+	return "nobody"
+}
+
+// Sent reports whether an event of this kind goes to anyone.
+func Sent(k Kind) bool {
+	switch k {
+	case KindArrival, KindDeparture, KindPackage:
+		return true
+	}
+	return false
+}
+
+// String names a kind for display.
+func (k Kind) String() string {
+	switch k {
+	case KindArrival:
+		return "arrival"
+	case KindDeparture:
+		return "departure"
+	case KindPackage:
+		return "package"
+	case KindDetection:
+		return "detection"
+	}
+	return "unknown"
+}
+
+// String names a clip state for display.
+func (c ClipState) String() string {
+	switch c {
+	case ClipNone:
+		return "none"
+	case ClipGrowing:
+		return "growing"
+	case ClipFinal:
+		return "final"
+	}
+	return "unknown"
+}
+
 // Op is how an event changed.
 type Op int
 

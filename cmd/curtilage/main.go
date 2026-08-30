@@ -32,6 +32,7 @@ import (
 	"github.com/jeffbstewart/curtilage/internal/captoken"
 	"github.com/jeffbstewart/curtilage/internal/config"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
+	"github.com/jeffbstewart/curtilage/internal/house"
 	"github.com/jeffbstewart/curtilage/internal/metrics"
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/policy"
@@ -249,6 +250,13 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration()}
 	server.Register(gs, api)
 	mux := adminMux(rotator, st, api)
+	// The in-the-house page: subnet-gated, 404 to everyone else.
+	allow, _ := config.ParseCIDRs(cfg.GetHouse().GetAllowCidrs()) // validated by config.Load
+	proxies, _ := config.ParseCIDRs(cfg.GetHouse().GetTrustedProxies())
+	if len(allow) > 0 {
+		log.Printf("house page on /house/ for %v (trusted proxies %v)", cfg.GetHouse().GetAllowCidrs(), cfg.GetHouse().GetTrustedProxies())
+	}
+	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies, DisplayName: cfg.DisplayName})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)

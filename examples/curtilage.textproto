@@ -29,3 +29,13 @@ frigate { url: "http://frigate.cameras.svc.cluster.local:5000" }
 # signing keys are environment Secrets, not here: CURTILAGE_MEDIA_KEY
 # and, during a rotation, CURTILAGE_MEDIA_KEY_PRIOR.
 links { ttl { seconds: 14400 } }
+
+# The in-the-house page (GET /house/): the last day of events with the
+# policy engine's verdict and audience -- the tuning tool.  Only these
+# subnets may see it; X-Forwarded-For is believed only from the listed
+# proxies.  Leave allow_cidrs empty to turn the page off.
+house {
+  allow_cidrs: "192.168.1.0/24"
+  allow_cidrs: "198.51.100.0/24"
+  trusted_proxies: "192.168.1.1"
+}

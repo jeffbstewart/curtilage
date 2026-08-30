@@ -23,6 +23,21 @@ message Config {
   // Frigate's HTTP API, for media.  Media is off when unset.
   Frigate frigate = 5;
   Links links = 6;
+  House house = 7;
+}
+
+// The in-the-house page, GET /house/: the last day of events with the
+// policy engine's verdict and audience for each -- what was sent, or
+// would have been, to whom.  The tuning tool.  Off unless allow_cidrs
+// is set; a caller from anywhere else gets a 404 like any other
+// unsigned request.
+message House {
+  // Callers allowed, in CIDR form: "192.168.1.0/24", "198.51.100.0/24".
+  repeated string allow_cidrs = 1;
+  // Reverse proxies whose X-Forwarded-For is believed, in CIDR form.
+  // The caller is then the rightmost forwarded address that is not
+  // itself a trusted proxy.  Empty: the header is ignored entirely.
+  repeated string trusted_proxies = 2;
 }
 
 message Frigate {

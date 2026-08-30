@@ -41,6 +41,7 @@ type Config struct {
 	// Frigate's HTTP API, for media.  Media is off when unset.
 	Frigate       *Frigate `protobuf:"bytes,5,opt,name=frigate,proto3" json:"frigate,omitempty"`
 	Links         *Links   `protobuf:"bytes,6,opt,name=links,proto3" json:"links,omitempty"`
+	House         *House   `protobuf:"bytes,7,opt,name=house,proto3" json:"house,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,6 +118,74 @@ func (x *Config) GetLinks() *Links {
 	return nil
 }
 
+func (x *Config) GetHouse() *House {
+	if x != nil {
+		return x.House
+	}
+	return nil
+}
+
+// The in-the-house page, GET /house/: the last day of events with the
+// policy engine's verdict and audience for each -- what was sent, or
+// would have been, to whom.  The tuning tool.  Off unless allow_cidrs
+// is set; a caller from anywhere else gets a 404 like any other
+// unsigned request.
+type House struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Callers allowed, in CIDR form: "192.168.1.0/24", "198.51.100.0/24".
+	AllowCidrs []string `protobuf:"bytes,1,rep,name=allow_cidrs,json=allowCidrs,proto3" json:"allow_cidrs,omitempty"`
+	// Reverse proxies whose X-Forwarded-For is believed, in CIDR form.
+	// The caller is then the rightmost forwarded address that is not
+	// itself a trusted proxy.  Empty: the header is ignored entirely.
+	TrustedProxies []string `protobuf:"bytes,2,rep,name=trusted_proxies,json=trustedProxies,proto3" json:"trusted_proxies,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *House) Reset() {
+	*x = House{}
+	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *House) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*House) ProtoMessage() {}
+
+func (x *House) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use House.ProtoReflect.Descriptor instead.
+func (*House) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *House) GetAllowCidrs() []string {
+	if x != nil {
+		return x.AllowCidrs
+	}
+	return nil
+}
+
+func (x *House) GetTrustedProxies() []string {
+	if x != nil {
+		return x.TrustedProxies
+	}
+	return nil
+}
+
 type Frigate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// e.g. "http://frigate.cameras.svc.cluster.local:5000".  Curtilage
@@ -128,7 +197,7 @@ type Frigate struct {
 
 func (x *Frigate) Reset() {
 	*x = Frigate{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	mi := &file_curtilage_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -140,7 +209,7 @@ func (x *Frigate) String() string {
 func (*Frigate) ProtoMessage() {}
 
 func (x *Frigate) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	mi := &file_curtilage_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -153,7 +222,7 @@ func (x *Frigate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Frigate.ProtoReflect.Descriptor instead.
 func (*Frigate) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Frigate) GetUrl() string {
@@ -180,7 +249,7 @@ type Links struct {
 
 func (x *Links) Reset() {
 	*x = Links{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[2]
+	mi := &file_curtilage_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -192,7 +261,7 @@ func (x *Links) String() string {
 func (*Links) ProtoMessage() {}
 
 func (x *Links) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[2]
+	mi := &file_curtilage_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -205,7 +274,7 @@ func (x *Links) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Links.ProtoReflect.Descriptor instead.
 func (*Links) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Links) GetTtl() *durationpb.Duration {
@@ -236,7 +305,7 @@ type Mqtt struct {
 
 func (x *Mqtt) Reset() {
 	*x = Mqtt{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[3]
+	mi := &file_curtilage_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -248,7 +317,7 @@ func (x *Mqtt) String() string {
 func (*Mqtt) ProtoMessage() {}
 
 func (x *Mqtt) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[3]
+	mi := &file_curtilage_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,7 +330,7 @@ func (x *Mqtt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Mqtt.ProtoReflect.Descriptor instead.
 func (*Mqtt) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Mqtt) GetHost() string {
@@ -324,7 +393,7 @@ type Recording struct {
 
 func (x *Recording) Reset() {
 	*x = Recording{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[4]
+	mi := &file_curtilage_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -336,7 +405,7 @@ func (x *Recording) String() string {
 func (*Recording) ProtoMessage() {}
 
 func (x *Recording) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[4]
+	mi := &file_curtilage_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -349,7 +418,7 @@ func (x *Recording) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recording.ProtoReflect.Descriptor instead.
 func (*Recording) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Recording) GetDir() string {
@@ -377,14 +446,19 @@ var File_curtilage_v1_config_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xfe\x01\n" +
+	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xa9\x02\n" +
 	"\x06Config\x12&\n" +
 	"\x04mqtt\x18\x01 \x01(\v2\x12.curtilage.v1.MqttR\x04mqtt\x125\n" +
 	"\trecording\x18\x02 \x01(\v2\x17.curtilage.v1.RecordingR\trecording\x12\x16\n" +
 	"\x06listen\x18\x03 \x01(\tR\x06listen\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12/\n" +
 	"\afrigate\x18\x05 \x01(\v2\x15.curtilage.v1.FrigateR\afrigate\x12)\n" +
-	"\x05links\x18\x06 \x01(\v2\x13.curtilage.v1.LinksR\x05links\"\x1b\n" +
+	"\x05links\x18\x06 \x01(\v2\x13.curtilage.v1.LinksR\x05links\x12)\n" +
+	"\x05house\x18\a \x01(\v2\x13.curtilage.v1.HouseR\x05house\"Q\n" +
+	"\x05House\x12\x1f\n" +
+	"\vallow_cidrs\x18\x01 \x03(\tR\n" +
+	"allowCidrs\x12'\n" +
+	"\x0ftrusted_proxies\x18\x02 \x03(\tR\x0etrustedProxies\"\x1b\n" +
 	"\aFrigate\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"4\n" +
 	"\x05Links\x12+\n" +
@@ -414,29 +488,31 @@ func file_curtilage_v1_config_proto_rawDescGZIP() []byte {
 	return file_curtilage_v1_config_proto_rawDescData
 }
 
-var file_curtilage_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_curtilage_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_curtilage_v1_config_proto_goTypes = []any{
 	(*Config)(nil),              // 0: curtilage.v1.Config
-	(*Frigate)(nil),             // 1: curtilage.v1.Frigate
-	(*Links)(nil),               // 2: curtilage.v1.Links
-	(*Mqtt)(nil),                // 3: curtilage.v1.Mqtt
-	(*Recording)(nil),           // 4: curtilage.v1.Recording
-	(*durationpb.Duration)(nil), // 5: google.protobuf.Duration
+	(*House)(nil),               // 1: curtilage.v1.House
+	(*Frigate)(nil),             // 2: curtilage.v1.Frigate
+	(*Links)(nil),               // 3: curtilage.v1.Links
+	(*Mqtt)(nil),                // 4: curtilage.v1.Mqtt
+	(*Recording)(nil),           // 5: curtilage.v1.Recording
+	(*durationpb.Duration)(nil), // 6: google.protobuf.Duration
 }
 var file_curtilage_v1_config_proto_depIdxs = []int32{
-	3, // 0: curtilage.v1.Config.mqtt:type_name -> curtilage.v1.Mqtt
-	4, // 1: curtilage.v1.Config.recording:type_name -> curtilage.v1.Recording
-	1, // 2: curtilage.v1.Config.frigate:type_name -> curtilage.v1.Frigate
-	2, // 3: curtilage.v1.Config.links:type_name -> curtilage.v1.Links
-	5, // 4: curtilage.v1.Links.ttl:type_name -> google.protobuf.Duration
-	5, // 5: curtilage.v1.Mqtt.keepalive:type_name -> google.protobuf.Duration
-	5, // 6: curtilage.v1.Recording.rotate_every:type_name -> google.protobuf.Duration
-	5, // 7: curtilage.v1.Recording.retention:type_name -> google.protobuf.Duration
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	4, // 0: curtilage.v1.Config.mqtt:type_name -> curtilage.v1.Mqtt
+	5, // 1: curtilage.v1.Config.recording:type_name -> curtilage.v1.Recording
+	2, // 2: curtilage.v1.Config.frigate:type_name -> curtilage.v1.Frigate
+	3, // 3: curtilage.v1.Config.links:type_name -> curtilage.v1.Links
+	1, // 4: curtilage.v1.Config.house:type_name -> curtilage.v1.House
+	6, // 5: curtilage.v1.Links.ttl:type_name -> google.protobuf.Duration
+	6, // 6: curtilage.v1.Mqtt.keepalive:type_name -> google.protobuf.Duration
+	6, // 7: curtilage.v1.Recording.rotate_every:type_name -> google.protobuf.Duration
+	6, // 8: curtilage.v1.Recording.retention:type_name -> google.protobuf.Duration
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_config_proto_init() }
@@ -450,7 +526,7 @@ func file_curtilage_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_curtilage_v1_config_proto_rawDesc), len(file_curtilage_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
