@@ -1,33 +1,191 @@
 // Command curtilage is the server: it watches Frigate over MQTT,
-// decides which events are news, and tells the household (DESIGN.md).
-// Placeholder until phase 1; it exists so the presubmits have a
-// package to check.
+// decides which events are news, and tells the household
+// (docs/DESIGN.md).  Phase 1: ingest + record.
+//
+//	curtilage run -config curtilage.textproto
+//	curtilage replay -file curtilage-20260829T120000Z.mcap
+//	curtilage version
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"sort"
+	"syscall"
+	"time"
+
+	"github.com/jeffbstewart/curtilage/internal/config"
+	"github.com/jeffbstewart/curtilage/internal/metrics"
+	"github.com/jeffbstewart/curtilage/internal/mqtt"
+	"github.com/jeffbstewart/curtilage/internal/record"
 )
 
 // version is set by the build (-ldflags "-X main.version=...").
 var version = "dev"
 
+func usage() {
+	fmt.Fprint(os.Stderr, `usage: curtilage <command> [flags]
+
+  run     -config F          watch the broker; record when configured
+  replay  -file F.mcap       summarize a recording
+  version                    print the version
+`)
+}
+
 func main() {
-	fs := flag.NewFlagSet("curtilage", flag.ContinueOnError)
-	showVersion := fs.Bool("version", false, "print the version and exit")
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
-		}
+	log.SetFlags(log.LstdFlags | log.LUTC)
+	if len(os.Args) < 2 {
+		usage()
 		os.Exit(2)
 	}
-	if *showVersion {
+	var err error
+	switch os.Args[1] {
+	case "run":
+		err = cmdRun(os.Args[2:])
+	case "replay":
+		err = cmdReplay(os.Args[2:])
+	case "version", "-version", "--version":
 		fmt.Println(versionString())
-		return
+	case "help", "-h", "--help":
+		usage()
+	default:
+		usage()
+		os.Exit(2)
 	}
-	fmt.Fprintln(os.Stderr, "curtilage: nothing to do yet (see docs/DESIGN.md)")
-	os.Exit(2)
+	if err != nil {
+		if !errors.Is(err, flag.ErrHelp) {
+			log.Printf("curtilage: %v", err)
+		}
+		os.Exit(1)
+	}
 }
 
 func versionString() string { return "curtilage " + version }
+
+func cmdRun(args []string) error {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "configuration file (protobuf text format)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		fs.Usage()
+		return fmt.Errorf("-config is required")
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	creds, err := config.CredentialsFromEnv()
+	if err != nil {
+		return err
+	}
+	record.Library = versionString()
+
+	// SIGTERM (kubernetes, docker stop) and SIGINT cancel the root
+	// context; everything below drains and closes in order before exit.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	srv := &http.Server{Addr: cfg.Listen, Handler: metricsMux()}
+	go func() {
+		log.Printf("metrics on %s/metrics", cfg.Listen)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("http: %v", err)
+		}
+	}()
+
+	records := make(chan *record.Record, 1024)
+	recErr := make(chan error, 1)
+	if dir := cfg.Recording.GetDir(); dir != "" {
+		go func() {
+			// Not ctx: the recorder must outlive the cancellation and
+			// finish the file on the closed channel.
+			recErr <- record.Write(context.Background(), dir, cfg.Recording.RotateEvery.AsDuration(), records)
+		}()
+		log.Printf("recording to %s (rotate every %s)", dir, cfg.Recording.RotateEvery.AsDuration())
+	} else {
+		go func() {
+			for range records {
+			}
+			recErr <- nil
+		}()
+	}
+
+	m := cfg.Mqtt
+	mqttErr := mqtt.Run(ctx, mqtt.Options{
+		Host: m.Host, Port: m.Port, ClientID: m.ClientId,
+		User: creds.User, Password: creds.Password,
+		Keepalive: m.Keepalive.AsDuration(), Subscriptions: m.Subscriptions,
+		PublishPrefix: m.PublishPrefix,
+	}, records) // Run closes records when it returns
+
+	// Order matters: broker session gone -> channel closed -> recorder
+	// drains and closes its MCAP -> then the HTTP server -> exit.
+	werr := <-recErr
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx)
+	if mqttErr != nil {
+		return mqttErr
+	}
+	if werr != nil {
+		return fmt.Errorf("recorder: %w", werr)
+	}
+	log.Print("clean shutdown")
+	return nil
+}
+
+func metricsMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler(version))
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
+	return mux
+}
+
+func cmdReplay(args []string) error {
+	fs := flag.NewFlagSet("replay", flag.ContinueOnError)
+	file := fs.String("file", "", "MCAP recording to summarize")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		fs.Usage()
+		return fmt.Errorf("-file is required")
+	}
+	recs, err := record.ReadAll(context.Background(), *file)
+	if err != nil {
+		if !errors.Is(err, record.ErrTruncated) {
+			return err
+		}
+		fmt.Printf("WARNING: %v\n", err) // the writer was killed before Close; what follows is what survived
+	}
+	if len(recs) == 0 {
+		fmt.Println("no records")
+		return nil
+	}
+	byTopic := map[string]int{}
+	var bytes int
+	for _, r := range recs {
+		byTopic[r.GetTopic()]++
+		bytes += len(r.GetPayload())
+	}
+	first, last := recs[0].GetReceivedAt().AsTime(), recs[len(recs)-1].GetReceivedAt().AsTime()
+	fmt.Printf("%d records, %d payload bytes, %s .. %s (%s)\n", len(recs), bytes,
+		first.UTC().Format(time.RFC3339), last.UTC().Format(time.RFC3339), last.Sub(first).Round(time.Second))
+	topics := make([]string, 0, len(byTopic))
+	for t := range byTopic {
+		topics = append(topics, t)
+	}
+	sort.Slice(topics, func(i, j int) bool { return byTopic[topics[i]] > byTopic[topics[j]] })
+	for _, t := range topics {
+		fmt.Printf("%8d  %s\n", byTopic[t], t)
+	}
+	return nil
+}

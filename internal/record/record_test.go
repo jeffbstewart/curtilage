@@ -1,0 +1,157 @@
+package record
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+func sample(n int, base time.Time) []*Record {
+	topics := []string{"frigate/events", "frigate/garage/person", "frigate/available"}
+	var recs []*Record
+	for i := 0; i < n; i++ {
+		recs = append(recs, &Record{
+			ReceivedAt: timestamppb.New(base.Add(time.Duration(i) * time.Millisecond)),
+			Topic:      topics[i%len(topics)],
+			Retained:   i%3 == 2,
+			Qos:        uint32(i % 2),
+			Payload:    []byte{byte(i), 0xff, 0x00, byte(i * 7)}, // arbitrary bytes, not text
+		})
+	}
+	return recs
+}
+
+func TestWriteThenReadRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	want := sample(50, base)
+
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	go func() { errc <- Write(context.Background(), dir, 24*time.Hour, in) }()
+	for _, r := range want {
+		in <- r
+	}
+	close(in) // the clean-shutdown contract: producer closes, writer finishes the file
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+
+	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
+	if len(files) != 1 {
+		t.Fatalf("want 1 file, got %v", files)
+	}
+	got, err := ReadAll(context.Background(), files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d records, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if !proto.Equal(got[i], want[i]) {
+			t.Errorf("record %d differs:\n got %v\nwant %v", i, got[i], want[i])
+		}
+	}
+	w, f, e := Stats()
+	if w < 50 || f < 1 || e != 0 {
+		t.Errorf("stats = %d %d %d", w, f, e)
+	}
+}
+
+func TestRotation(t *testing.T) {
+	dir := t.TempDir()
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	go func() { errc <- Write(context.Background(), dir, 50*time.Millisecond, in) }()
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("1")}
+	time.Sleep(120 * time.Millisecond)
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("2")}
+	close(in)
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
+	if len(files) != 2 {
+		t.Fatalf("want 2 files after rotation, got %v", files)
+	}
+	for _, f := range files {
+		recs, err := ReadAll(context.Background(), f)
+		if err != nil || len(recs) != 1 {
+			t.Errorf("%s: %d records, %v", f, len(recs), err)
+		}
+	}
+}
+
+func TestCancelStillClosesFile(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	go func() { errc <- Write(ctx, dir, time.Hour, in) }()
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("x")}
+	cancel() // abort path: no close(in), but the file must still be complete
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
+	if len(files) != 1 {
+		t.Fatalf("want 1 file, got %v", files)
+	}
+	if recs, err := ReadAll(context.Background(), files[0]); err != nil || len(recs) != 1 {
+		t.Errorf("file not readable after cancel: %d records, %v", len(recs), err)
+	}
+}
+
+func TestFileName(t *testing.T) {
+	got := FileName(time.Date(2026, 8, 29, 22, 5, 9, 0, time.FixedZone("x", -4*3600)))
+	if got != "curtilage-20260830T020509Z.mcap" {
+		t.Errorf("FileName = %q (must be UTC)", got)
+	}
+}
+
+func TestReadRejectsGarbage(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "junk.mcap")
+	os.WriteFile(p, []byte("not an mcap"), 0o644)
+	if _, err := ReadAll(context.Background(), p); err == nil {
+		t.Error("expected an error for a non-MCAP file")
+	}
+}
+
+func TestTruncatedFileStillYieldsRecords(t *testing.T) {
+	dir := t.TempDir()
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	go func() { errc <- Write(context.Background(), dir, time.Hour, in) }()
+	for _, r := range sample(20, time.Now()) {
+		in <- r
+	}
+	close(in)
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
+	b, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Chop the summary and footer off, as a SIGKILL mid-write would.
+	cut := filepath.Join(dir, "cut.mcap")
+	if err := os.WriteFile(cut, b[:len(b)-len(b)/3], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := ReadAll(context.Background(), cut)
+	if err == nil || !errors.Is(err, ErrTruncated) {
+		t.Fatalf("want ErrTruncated, got %v", err)
+	}
+	if len(recs) == 0 {
+		t.Fatal("no records recovered from the truncated file")
+	}
+	t.Logf("recovered %d of 20 records from a file cut to 2/3", len(recs))
+}

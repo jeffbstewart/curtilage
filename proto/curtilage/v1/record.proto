@@ -1,0 +1,31 @@
+// Recorded broker traffic (docs/DESIGN.md "Instrument before tuning").
+//
+// Every MQTT message curtilage receives is recorded as one Record in
+// an MCAP file (one MCAP channel per MQTT topic, protobuf-encoded with
+// this schema embedded), so a day of real driveway traffic replays
+// into the policy engine as a test fixture.  The payload is the
+// broker's bytes VERBATIM -- never re-encoded -- so a recording made
+// against one Frigate version still reproduces exactly what that
+// version said when a later parser is tested against it.
+syntax = "proto3";
+
+package curtilage.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
+
+// One MQTT message as received.
+message Record {
+  // When curtilage received it (its clock, not the broker's).
+  google.protobuf.Timestamp received_at = 1;
+  // The MQTT topic, e.g. "frigate/events".
+  string topic = 2;
+  // True when the broker delivered it as a retained message (the
+  // state a subscriber gets on connect, not a live publish).
+  bool retained = 3;
+  // MQTT QoS the message was delivered with (0, 1 or 2).
+  uint32 qos = 4;
+  // The payload, byte for byte.
+  bytes payload = 5;
+}

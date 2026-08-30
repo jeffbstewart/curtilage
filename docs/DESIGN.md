@@ -109,6 +109,35 @@ writes the raw topic stream to files.  Those recordings are the test
 fixtures; the rules are tuned to the household's driveway, not to
 guesses.
 
+Recordings are **MCAP** files (Foxglove's container for timestamped,
+typed messages): one MCAP channel per MQTT topic, each message a
+`curtilage.v1.Record` (received time, topic, retained flag, QoS, and
+the broker's payload bytes verbatim -- never re-encoded, so a
+recording made against one Frigate version still says exactly what
+that version said), with the protobuf schema embedded so `mcap`
+tooling decodes them without our code; zstd-compressed chunks, CRCs,
+index, one file per day (UTC).  Chosen over length-delimited protobuf
+for the index, the compression, the self-description, and the
+tooling -- and to learn the format.  The writer's interface is a
+channel: the MQTT client is a producer, the recorder drains, and
+closing the channel is the shutdown signal.
+
+**Clean shutdown is a requirement, not a nicety.**  An MCAP file is
+complete only once its summary and footer are written, so SIGTERM
+(kubernetes, `docker stop`) cancels the root context, the MQTT
+client publishes `offline`, disconnects and closes the channel, the
+recorder drains and closes the file, and only then does the process
+exit -- ~300 ms, proven against a real broker.  A file that still
+gets torn (SIGKILL, node loss) is read back in file order as far as
+it goes and reported as truncated; every fully written chunk
+survives.
+
+**Configuration is protobuf text format** (`curtilage.textproto`,
+schema in `proto/curtilage/v1/config.proto`): human-editable,
+commented, typed against the schema -- a typo is a parse error, not a
+silently ignored key -- and evolved under the same `buf breaking`
+guard as the API.  Credentials are never in the file.
+
 ## Ingest: MQTT directly
 
 Curtilage is an MQTT client with its own broker account (read
