@@ -39,3 +39,6 @@ house {
   allow_cidrs: "198.51.100.0/24"
   trusted_proxies: "192.168.1.1"
 }
+
+# Every time a person reads (the house page) is shown in this zone.
+timezone: "America/New_York"

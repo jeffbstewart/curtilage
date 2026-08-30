@@ -257,7 +257,8 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 	if len(allow) > 0 {
 		log.Printf("house page on /house/ for %v (trusted proxies %v)", cfg.GetHouse().GetAllowCidrs(), cfg.GetHouse().GetTrustedProxies())
 	}
-	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies, DisplayName: cfg.DisplayName})
+	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies,
+		DisplayName: cfg.DisplayName, Location: config.Location(cfg)})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)

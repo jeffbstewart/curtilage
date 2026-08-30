@@ -115,6 +115,19 @@ func TestPageViews(t *testing.T) {
 	if !strings.Contains(body, "src-pkg-old") || !strings.Contains(body, "last 48 hours") {
 		t.Error("48h window lacks the 30h-old package")
 	}
+	// Times render in the household's zone: 12:00Z is 08:00 in New York
+	// on that date, and the zone is named.
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Location = ny
+	_, body = get(t, h, "192.168.1.50:1", "", "?view=all")
+	if !strings.Contains(body, "(America/New_York)") || !strings.Contains(body, "Sun 07:55:00") { // "live" started 5m before noon UTC
+		t.Errorf("times not in America/New_York:\n%s", body)
+	}
+	h.Location = nil
+
 	// Window is capped at retention.
 	_, body = get(t, h, "192.168.1.50:1", "", "?hours=9999")
 	if !strings.Contains(body, "last 168 hours") {

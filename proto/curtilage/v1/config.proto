@@ -24,6 +24,10 @@ message Config {
   Frigate frigate = 5;
   Links links = 6;
   House house = 7;
+  // IANA time zone for anything a person reads (the house page):
+  // "America/New_York".  UTC if unset.  The zone database is built
+  // into the binary, so this needs nothing from the container.
+  string timezone = 8;
 }
 
 // The in-the-house page, GET /house/: the last day of events with the
