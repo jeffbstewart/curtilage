@@ -20,11 +20,16 @@ schema `proto/curtilage/v1/config.proto`); credentials come from
 `CURTILAGE_MQTT_USER` / `CURTILAGE_MQTT_PASSWORD`.  Recordings are
 MCAP files, one channel per MQTT topic, `curtilage.v1.Record`
 messages with the schema embedded -- `mcap info` and Foxglove read
-them directly.  `/metrics` (Prometheus) and `/healthz` on `listen`.
+them directly.  On `listen`: `/metrics` (Prometheus), `/healthz`, and
+`POST /admin/rotate`, which closes the current recording immediately
+so it is complete and indexed (unauthenticated; the listener is LAN
+only).  Files also rotate on `rotate_every`, idle or not.
 
 Shutdown: SIGTERM/SIGINT publishes `offline`, disconnects, finishes
 the current MCAP (summary + footer) and exits; a file torn by SIGKILL
 is still readable up to the last complete chunk (`replay` says so).
+Chunks are small (64 KiB) so a file still being written lags the live
+stream by little.
 
 ## Development
 

@@ -64,13 +64,58 @@ func Checksum(payload []byte) uint32 { return crc32.Checksum(payload, castagnoli
 // are delivered.
 var ErrCorrupt = errors.New("payload checksum mismatch (record skipped)")
 
-// Write drains in into MCAP files under dir, starting a new file every
-// rotateEvery, until in is closed (clean shutdown) or ctx is cancelled
-// (abort: the current file is still closed properly).  Returns the
-// first fatal error; a file that cannot be opened is fatal, a message
-// that cannot be marshalled is counted and skipped.
-func Write(ctx context.Context, dir string, rotateEvery time.Duration, in <-chan *Record) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+// chunkSize bounds how much a reader of a file still being written can
+// be missing: a chunk reaches disk only when this much uncompressed
+// data has accumulated (the mcap default is 1 MiB, hours of a quiet
+// broker), so this is deliberately small.
+const chunkSize = 64 << 10
+
+// Options configures Write.
+type Options struct {
+	Dir         string
+	RotateEvery time.Duration
+	// Rotate, if non-nil, delivers out-of-band rotation requests (see
+	// Rotator); Write answers each with the path of the file it closed,
+	// "" when none was open.
+	Rotate <-chan chan<- string
+}
+
+// Rotator lets another goroutine (the HTTP admin endpoint) ask a
+// running Write to close its current file now.
+type Rotator struct{ ch chan chan<- string }
+
+// NewRotator returns a Rotator; pass its Chan to Options.Rotate.
+func NewRotator() *Rotator { return &Rotator{ch: make(chan chan<- string)} }
+
+// Chan is the receiving side for Options.Rotate.
+func (r *Rotator) Chan() <-chan chan<- string { return r.ch }
+
+// Rotate asks the writer to close its current file and waits for the
+// answer: the closed file's path, or "" if no file was open.  It fails
+// only if ctx ends first (the writer is gone or too busy).
+func (r *Rotator) Rotate(ctx context.Context) (string, error) {
+	reply := make(chan string, 1)
+	select {
+	case r.ch <- reply:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	select {
+	case p := <-reply:
+		return p, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+// Write drains in into MCAP files under opts.Dir, starting a new file
+// every opts.RotateEvery (or on request via opts.Rotate), until in is
+// closed (clean shutdown) or ctx is cancelled (abort: the current file
+// is still closed properly).  Returns the first fatal error; a file
+// that cannot be opened is fatal, a message that cannot be marshalled
+// is counted and skipped.
+func Write(ctx context.Context, opts Options, in <-chan *Record) error {
+	if err := os.MkdirAll(opts.Dir, 0o755); err != nil {
 		return err
 	}
 	var f *file
@@ -82,25 +127,46 @@ func Write(ctx context.Context, dir string, rotateEvery time.Duration, in <-chan
 		f = nil
 		return err
 	}
+	// An idle broker must not keep an over-age file open, so age is
+	// checked on a timer as well as on arrival.
+	tick := time.NewTicker(idleCheckEvery(opts.RotateEvery))
+	defer tick.Stop()
 	for {
 		var rec *Record
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return closeCurrent()
+		case reply := <-opts.Rotate:
+			var closed string
+			if f != nil {
+				closed = f.path
+			}
+			if err := closeCurrent(); err != nil {
+				return err
+			}
+			reply <- closed
+			continue
+		case <-tick.C:
+			if f != nil && time.Since(f.started) >= opts.RotateEvery {
+				if err := closeCurrent(); err != nil {
+					return err
+				}
+			}
+			continue
 		case rec, ok = <-in:
 			if !ok {
 				return closeCurrent()
 			}
 		}
 		now := time.Now()
-		if f != nil && now.Sub(f.started) >= rotateEvery {
+		if f != nil && now.Sub(f.started) >= opts.RotateEvery {
 			if err := closeCurrent(); err != nil {
 				return err
 			}
 		}
 		if f == nil {
-			nf, err := open(dir, now)
+			nf, err := open(opts.Dir, now)
 			if err != nil {
 				return err
 			}
@@ -113,6 +179,20 @@ func Write(ctx context.Context, dir string, rotateEvery time.Duration, in <-chan
 		}
 		recordsWritten.Add(1)
 	}
+}
+
+// idleCheckEvery is how often Write re-checks file age with no traffic:
+// a tenth of the rotation period, clamped so tests with tiny periods
+// stay responsive and long periods don't wake up needlessly.
+func idleCheckEvery(rotateEvery time.Duration) time.Duration {
+	d := rotateEvery / 10
+	if d < 10*time.Millisecond {
+		d = 10 * time.Millisecond
+	}
+	if d > time.Minute {
+		d = time.Minute
+	}
+	return d
 }
 
 // file is one open MCAP file.
@@ -154,6 +234,7 @@ func open(dir string, now time.Time) (*file, error) {
 	}
 	w, err := mcap.NewWriter(osf, &mcap.WriterOptions{
 		Chunked:     true,
+		ChunkSize:   chunkSize,
 		Compression: mcap.CompressionZSTD,
 		IncludeCRC:  true,
 	})
