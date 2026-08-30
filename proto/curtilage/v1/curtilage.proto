@@ -2,29 +2,229 @@
 // the app (docs/DESIGN.md "Presentation").  Additive changes only:
 // buf breaking runs against main in CI.
 //
-// Only the handshake exists yet; the rest arrives with the phases.
+// Shape: the app sees EVENTS -- things the policy engine decided are
+// worth a look -- never raw Frigate.  An Event is presentation-shaped
+// (what happened, where, when, what there is to see), so the policy
+// engine can change how it decides without the app changing how it
+// shows.  Media (the snapshot now; clips later) streams by event id.
+//
+// Enrollment, preservation and feedback are not here yet; they arrive
+// with their phases rather than as placeholders.
+//
+// Enum convention: every enum's zero value is <NAME>_UNKNOWN and is
+// never sent; a reader that sees it has a message from a server that
+// did not set the field.
 syntax = "proto3";
 
 package curtilage.v1;
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
 
-// ServerInfo lets an app say "your server is too old" gracefully, and
-// tells it which features this server offers before it asks for them.
 service CurtilageService {
+  // Handshake, both ways: the client says what it is, the server says
+  // what it offers, and either side can conclude the other is too old
+  // before anything else is asked.
   rpc GetServerInfo(GetServerInfoRequest) returns (GetServerInfoResponse);
+
+  // The cameras this installation has, as the household named them.
+  rpc ListCameras(ListCamerasRequest) returns (ListCamerasResponse);
+
+  // Events newest first, a page at a time, back to the edge of
+  // retention.  New events are not paged for; WatchEvents delivers
+  // them.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+
+  // Follow events as they start, change and end.  Optionally replays
+  // recent history first, so a client that reconnects misses nothing.
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+
+  // One piece of media for one event, streamed: exactly one info
+  // message first, then the bytes in chunks.
+  rpc GetMedia(GetMediaRequest) returns (stream GetMediaResponse);
 }
 
-message GetServerInfoRequest {}
+// What the client is, so the server can refuse one it no longer
+// speaks to.
+enum Platform {
+  PLATFORM_UNKNOWN = 0;
+  PLATFORM_IOS = 1;
+}
+
+message GetServerInfoRequest {
+  // The API version this client was built against.  1 for now.
+  uint32 api_version = 1;
+  Platform platform = 2;
+  // Free-form build identifier for logs and support ("1.0 (42)",
+  // a git sha); the server never parses it.
+  string build = 3;
+}
 
 message GetServerInfoResponse {
   // Server version, e.g. "0.1.0".
   string version = 1;
-  // Lowest app API version this server still speaks.
+  // Lowest client API version this server still speaks.
   uint32 min_api_version = 2;
   // The API version this server implements.
   uint32 api_version = 3;
   // Human-readable name of this installation (never a hostname the
-  // app should connect to; that comes from enrolment).
+  // app should connect to; that comes from enrollment).
   string display_name = 4;
+  // How far back events and their media are kept.
+  google.protobuf.Duration retention = 5;
+}
+
+message ListCamerasRequest {}
+
+message Camera {
+  // The name the household configured, as it appears in Event.camera
+  // and in ListEventsRequest.cameras: "porch-east".
+  string name = 1;
+  // What to show a person, if the household set one; else empty and
+  // the app shows name.
+  string display_name = 2;
+}
+
+message ListCamerasResponse {
+  repeated Camera cameras = 1;
+}
+
+// What the policy engine decided an event is.
+enum EventKind {
+  EVENT_KIND_UNKNOWN = 0;
+  // Something new is here: a tracked object arrived in a zone that
+  // matters and stayed long enough to be real.
+  EVENT_KIND_ARRIVAL = 1;
+  // Something that was here left.
+  EVENT_KIND_DEPARTURE = 2;
+  // A package appeared (state classifier absent -> present).
+  EVENT_KIND_PACKAGE = 3;
+  // A tracked object the engine passed through without a stronger
+  // verdict.  The list is built on these; pushes are not.
+  EVENT_KIND_DETECTION = 4;
+}
+
+// Whether there is a clip to play, and whether it is still growing.
+enum ClipState {
+  CLIP_STATE_UNKNOWN = 0;
+  // No clip for this event (yet, or ever).
+  CLIP_STATE_NONE = 1;
+  // The event is running; the clip covers [start, now] and extends.
+  CLIP_STATE_GROWING = 2;
+  // The event ended and the clip is complete.
+  CLIP_STATE_FINAL = 3;
+}
+
+// One thing that happened in the curtilage.
+message Event {
+  // Opaque, server-minted, stable for the event's lifetime.  Never
+  // guessable: media is fetched by this id.
+  string id = 1;
+  // Camera name as the household configured it (Camera.name).
+  string camera = 2;
+  // Object label from perception: "car", "person", "package", ...
+  string label = 3;
+  // Classifier refinement of the label ("blue minivan"), or empty.
+  string sub_label = 4;
+  // Zones the object was in, as the household named them.
+  repeated string zones = 5;
+  EventKind kind = 6;
+  google.protobuf.Timestamp started_at = 7;
+  // Unset while the event is still running.
+  google.protobuf.Timestamp ended_at = 8;
+  // A snapshot can be fetched (GetMedia with MEDIA_SNAPSHOT).
+  bool has_snapshot = 9;
+  ClipState clip = 10;
+  // See EventDebug.  Nothing in the app depends on it.
+  EventDebug debug = 11;
+}
+
+// Where an Event came from, for logs and human eyes only.  This
+// message is OUTSIDE the compatibility promise: fields may be added,
+// renamed, or removed at any time without an API version change.  A
+// client must not branch on anything in it.
+message EventDebug {
+  // The perception layer's own id for the underlying object (a
+  // Frigate event id).
+  string source_id = 1;
+}
+
+message ListEventsRequest {
+  // Only these cameras (Camera.name); empty means all.
+  repeated string cameras = 1;
+  // Page size; the server caps it.  Zero means the server's default.
+  uint32 page_size = 2;
+  // From the previous response, to get the next (older) page.  Empty
+  // starts from the newest event.
+  string continuation_token = 3;
+}
+
+message ListEventsResponse {
+  // Newest first.  Empty means the previous page was the last: the
+  // edge of retention has been reached and there is nothing older.
+  repeated Event events = 1;
+  // Always set when events is non-empty.  Send it back to get the
+  // page older than these.  Opaque; do not store it across sessions.
+  string continuation_token = 2;
+}
+
+// How an event changed.
+enum EventChange {
+  EVENT_CHANGE_UNKNOWN = 0;
+  // A new event; the Event is complete as of now.
+  EVENT_CHANGE_STARTED = 1;
+  // Something about a running event changed (zones, sub-label, kind,
+  // media availability).  The Event is the whole current state, not
+  // a delta.
+  EVENT_CHANGE_UPDATED = 2;
+  // The event ended; ended_at is set.
+  EVENT_CHANGE_ENDED = 3;
+}
+
+message WatchEventsRequest {
+  // Replay changes since this time before following live ones, so a
+  // reconnecting client catches up.  Unset: live only.
+  google.protobuf.Timestamp since = 1;
+  // Only these cameras (Camera.name); empty means all.
+  repeated string cameras = 2;
+}
+
+message WatchEventsResponse {
+  EventChange change = 1;
+  // The event's whole current state.
+  Event event = 2;
+}
+
+// Which media of an event is wanted.
+enum Media {
+  MEDIA_UNKNOWN = 0;
+  // The still image of the object, with its bounding box: JPEG.
+  MEDIA_SNAPSHOT = 1;
+}
+
+message GetMediaRequest {
+  string event_id = 1;
+  Media media = 2;
+}
+
+// One message of the GetMedia stream.  Each message carries exactly
+// one of the two: the stream's FIRST message is always info and only
+// the first is; every message after it is a chunk, in order, and the
+// stream ends after the last chunk.  A client concatenates the chunks
+// and has the media described by info.
+message GetMediaResponse {
+  oneof payload {
+    MediaInfo info = 1;
+    bytes chunk = 2;
+  }
+}
+
+message MediaInfo {
+  // MIME type, e.g. "image/jpeg".
+  string content_type = 1;
+  // Total bytes to follow, when known; zero when the media is still
+  // growing.
+  uint64 size = 2;
 }

@@ -165,7 +165,7 @@ design is relay-shaped from the first commit, with the relay being a
 no-op for the house:
 
 - The server encrypts the notification payload to the phone's key
-  (established at enrolment).  A relay -- whoever runs it -- forwards
+  (established at enrollment).  A relay -- whoever runs it -- forwards
   `{device token, opaque blob}` and learns nothing else.  The app's
   Notification Service Extension decrypts and fetches the thumbnail
   from the *user's own* server with a capability token.
@@ -191,9 +191,13 @@ go2rtc's HLS for live (~2 s, no library), and a server stream for
 "the clip is growing" so nothing polls.
 
 The API is **gRPC over HTTP/2** behind the household's reverse proxy
-(the established house pattern): `Enrol`, `GetServerInfo`,
-`ListEvents`, `WatchEvent`, `GetMedia`, `Preserve`, `Feedback`.
-QUIC is a later config change, not a v1 feature.
+(the established house pattern, as MediaManager: native gRPC on the
+one port, grpc-swift on the phone): `GetServerInfo`, `ListEvents`,
+`WatchEvents`, `GetMedia` now (`proto/curtilage/v1/curtilage.proto`);
+enrollment, preserve and feedback arrive with their phases rather than
+as placeholders.  Events are presentation-shaped, so the policy engine
+can change its mind without the app changing its screens.  QUIC is a
+later config change, not a v1 feature.
 
 The **web page** is the fallback and the reviewer's first view: a
 capability link opens the event -- snapshot with bounding box, the
@@ -213,7 +217,7 @@ finished clip when Frigate has cut it.
   for a few hours and nothing else.  A leaked screenshot leaks one
   event.  No session, no login; works in Safari, in a webview, on a
   watch.
-- **Devices enrol once** (QR code on the LAN) and hold a key in the
+- **Devices enroll once** (QR code on the LAN) and hold a key in the
   Keychain.  Live view, preserve and browsing require an enrolled
   device; Face ID gates the sensitive actions.  Passkeys (WebAuthn)
   are the v2 form of the same thing.
@@ -312,7 +316,7 @@ sibling projects.
 2. **Policy**: the state machine on the fixtures; zones; quiet rules;
    MQTT state out to Home Assistant.
 3. **Public door**: the exposure assessment, then the proxy listing.
-4. **App**: enrolment, rich notifications via APNs, event screen,
+4. **App**: enrollment, rich notifications via APNs, event screen,
    live (HLS), in-app demo; TestFlight internal.
 5. **Preserve**: the archive pipeline and its button.
 6. **Later**: passkeys, the blind relay as a real service, QUIC,

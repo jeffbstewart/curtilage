@@ -10,3 +10,8 @@ plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.10
     out: ../gen
     opt: paths=source_relative
+  # Service stubs (CurtilageServiceServer/Client): native gRPC, as
+  # MediaManager -- one port, grpc-swift on the phone.
+  - remote: buf.build/grpc/go:v1.5.1
+    out: ../gen
+    opt: paths=source_relative
