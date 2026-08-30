@@ -32,8 +32,12 @@ type Config struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Mqtt      *Mqtt                  `protobuf:"bytes,1,opt,name=mqtt,proto3" json:"mqtt,omitempty"`
 	Recording *Recording             `protobuf:"bytes,2,opt,name=recording,proto3" json:"recording,omitempty"`
-	// Address for /metrics (and, later, the API), e.g. ":9118".
-	Listen        string `protobuf:"bytes,3,opt,name=listen,proto3" json:"listen,omitempty"`
+	// Address for the API, /metrics, /healthz and /admin, e.g. ":9118".
+	// One listener: gRPC (h2c) and HTTP share it, as MediaManager does.
+	Listen string `protobuf:"bytes,3,opt,name=listen,proto3" json:"listen,omitempty"`
+	// What the app calls this installation (GetServerInfo);
+	// "curtilage" if unset.
+	DisplayName   string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,6 +89,13 @@ func (x *Config) GetRecording() *Recording {
 func (x *Config) GetListen() string {
 	if x != nil {
 		return x.Listen
+	}
+	return ""
+}
+
+func (x *Config) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
 	}
 	return ""
 }
@@ -186,7 +197,12 @@ type Recording struct {
 	Dir string `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
 	// Start a new file this often; 24h if unset.  Files are named by
 	// their start time (UTC): curtilage-YYYYMMDDTHHMMSSZ.mcap.
-	RotateEvery   *durationpb.Duration `protobuf:"bytes,2,opt,name=rotate_every,json=rotateEvery,proto3" json:"rotate_every,omitempty"`
+	RotateEvery *durationpb.Duration `protobuf:"bytes,2,opt,name=rotate_every,json=rotateEvery,proto3" json:"rotate_every,omitempty"`
+	// How long events are kept, in memory and as files on disk; older
+	// ones are pruned hourly.  7 days if unset.  The event store is
+	// rebuilt from these files at startup, so this is also how far back
+	// ListEvents can go.
+	Retention     *durationpb.Duration `protobuf:"bytes,3,opt,name=retention,proto3" json:"retention,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -235,25 +251,34 @@ func (x *Recording) GetRotateEvery() *durationpb.Duration {
 	return nil
 }
 
+func (x *Recording) GetRetention() *durationpb.Duration {
+	if x != nil {
+		return x.Retention
+	}
+	return nil
+}
+
 var File_curtilage_v1_config_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\x7f\n" +
+	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xa2\x01\n" +
 	"\x06Config\x12&\n" +
 	"\x04mqtt\x18\x01 \x01(\v2\x12.curtilage.v1.MqttR\x04mqtt\x125\n" +
 	"\trecording\x18\x02 \x01(\v2\x17.curtilage.v1.RecordingR\trecording\x12\x16\n" +
-	"\x06listen\x18\x03 \x01(\tR\x06listen\"\xd1\x01\n" +
+	"\x06listen\x18\x03 \x01(\tR\x06listen\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\"\xd1\x01\n" +
 	"\x04Mqtt\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1b\n" +
 	"\tclient_id\x18\x03 \x01(\tR\bclientId\x12$\n" +
 	"\rsubscriptions\x18\x04 \x03(\tR\rsubscriptions\x12%\n" +
 	"\x0epublish_prefix\x18\x05 \x01(\tR\rpublishPrefix\x127\n" +
-	"\tkeepalive\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\tkeepalive\"[\n" +
+	"\tkeepalive\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\tkeepalive\"\x94\x01\n" +
 	"\tRecording\x12\x10\n" +
 	"\x03dir\x18\x01 \x01(\tR\x03dir\x12<\n" +
-	"\frotate_every\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\vrotateEveryB\xb0\x01\n" +
+	"\frotate_every\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\vrotateEvery\x127\n" +
+	"\tretention\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\tretentionB\xb0\x01\n" +
 	"\x10com.curtilage.v1B\vConfigProtoP\x01Z>github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1\xa2\x02\x03CXX\xaa\x02\fCurtilage.V1\xca\x02\fCurtilage\\V1\xe2\x02\x18Curtilage\\V1\\GPBMetadata\xea\x02\rCurtilage::V1b\x06proto3"
 
 var (
@@ -280,11 +305,12 @@ var file_curtilage_v1_config_proto_depIdxs = []int32{
 	2, // 1: curtilage.v1.Config.recording:type_name -> curtilage.v1.Recording
 	3, // 2: curtilage.v1.Mqtt.keepalive:type_name -> google.protobuf.Duration
 	3, // 3: curtilage.v1.Recording.rotate_every:type_name -> google.protobuf.Duration
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 4: curtilage.v1.Recording.retention:type_name -> google.protobuf.Duration
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_config_proto_init() }

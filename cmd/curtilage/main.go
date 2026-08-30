@@ -1,9 +1,11 @@
 // Command curtilage is the server: it watches Frigate over MQTT,
 // decides which events are news, and tells the household
-// (docs/DESIGN.md).  Phase 1: ingest + record.
+// (docs/DESIGN.md).  Phase 1: ingest, record, and serve the events.
 //
 //	curtilage run -config curtilage.textproto
+//	curtilage run -config curtilage.textproto -replay F.mcap -speed 10
 //	curtilage replay -file curtilage-20260829T120000Z.mcap
+//	curtilage trim -file F.mcap -out G.mcap -from T -to T -keep RE -drop RE
 //	curtilage version
 package main
 
@@ -18,13 +20,22 @@ import (
 	"os/signal"
 	"regexp"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+	"google.golang.org/grpc"
+
+	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/config"
 	"github.com/jeffbstewart/curtilage/internal/metrics"
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
+	"github.com/jeffbstewart/curtilage/internal/policy"
 	"github.com/jeffbstewart/curtilage/internal/record"
+	"github.com/jeffbstewart/curtilage/internal/server"
+	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
 // version is set by the build (-ldflags "-X main.version=...").
@@ -33,7 +44,8 @@ var version = "dev"
 func usage() {
 	fmt.Fprint(os.Stderr, `usage: curtilage <command> [flags]
 
-  run     -config F          watch the broker; record when configured
+  run     -config F          watch the broker; record when configured; serve the API
+          -replay F.mcap     ... or serve from a recording instead (-speed N; 0 = no pacing)
   replay  -file F.mcap       summarize a recording (-topic, -dump N)
   trim    -file F -out G     cut a recording down (-from, -to, -keep, -drop)
   version                    print the version
@@ -75,6 +87,8 @@ func versionString() string { return "curtilage " + version }
 func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "configuration file (protobuf text format)")
+	replay := fs.String("replay", "", "serve from this recording instead of the broker (nothing is recorded)")
+	speed := fs.Float64("speed", 1, "with -replay: 1 is real time, 10 is ten times faster, 0 is no pacing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,11 +96,10 @@ func cmdRun(args []string) error {
 		fs.Usage()
 		return fmt.Errorf("-config is required")
 	}
-	cfg, err := config.Load(*cfgPath)
-	if err != nil {
-		return err
+	if *speed < 0 {
+		return fmt.Errorf("-speed must be >= 0")
 	}
-	creds, err := config.CredentialsFromEnv()
+	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -97,34 +110,64 @@ func cmdRun(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	retention := cfg.Recording.GetRetention().AsDuration()
+	st := store.New(retention)
+	eng := policy.NewPassthrough()
+	if *replay != "" {
+		return runReplay(ctx, cfg, st, eng, *replay, *speed)
+	}
+
+	creds, err := config.CredentialsFromEnv()
+	if err != nil {
+		return err
+	}
+
+	// The store is a view of the recordings: rebuild it from them
+	// before taking live traffic, and delete the ones past retention.
+	dir := cfg.Recording.GetDir()
+	if dir != "" {
+		res, errs := store.Rebuild(ctx, st, eng, dir, time.Now())
+		for _, e := range errs {
+			log.Printf("rebuild: %v", e)
+		}
+		s := st.Stats()
+		log.Printf("rebuilt from %d recordings (%d records, %d torn, %d deleted): %d events, %d live",
+			res.Files, res.Records, res.Truncated, res.Deleted, s.Events, s.Live)
+	}
+
+	// Broker -> records -> (engine -> store) and -> recorder.
 	records := make(chan *record.Record, 1024)
+	toRecorder := make(chan *record.Record, 1024)
 	recErr := make(chan error, 1)
 	var rotator *record.Rotator
-	if dir := cfg.Recording.GetDir(); dir != "" {
+	if dir != "" {
 		rotator = record.NewRotator()
 		go func() {
 			// Not ctx: the recorder must outlive the cancellation and
 			// finish the file on the closed channel.
 			recErr <- record.Write(context.Background(), record.Options{
 				Dir: dir, RotateEvery: cfg.Recording.RotateEvery.AsDuration(), Rotate: rotator.Chan(),
-			}, records)
+			}, toRecorder)
 		}()
-		log.Printf("recording to %s (rotate every %s)", dir, cfg.Recording.RotateEvery.AsDuration())
+		log.Printf("recording to %s (rotate every %s, keep %s)", dir, cfg.Recording.RotateEvery.AsDuration(), retention)
 	} else {
 		go func() {
-			for range records {
+			for range toRecorder {
 			}
 			recErr <- nil
 		}()
 	}
-
-	srv := &http.Server{Addr: cfg.Listen, Handler: adminMux(rotator)}
 	go func() {
-		log.Printf("metrics on %s/metrics", cfg.Listen)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("http: %v", err)
+		defer close(toRecorder)
+		for r := range records {
+			store.Feed(st, eng, r)
+			toRecorder <- r
 		}
 	}()
+
+	srv, gs := httpServer(cfg, st, rotator)
+	go serve(srv, cfg.Listen)
+	go pruneHourly(ctx, st, dir)
 
 	m := cfg.Mqtt
 	mqttErr := mqtt.Run(ctx, mqtt.Options{
@@ -134,12 +177,11 @@ func cmdRun(args []string) error {
 		PublishPrefix: m.PublishPrefix,
 	}, records) // Run closes records when it returns
 
-	// Order matters: broker session gone -> channel closed -> recorder
-	// drains and closes its MCAP -> then the HTTP server -> exit.
+	// Order matters: broker session gone -> channel closed -> engine
+	// fed -> recorder drains and closes its MCAP -> then the HTTP and
+	// gRPC servers -> exit.
 	werr := <-recErr
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = srv.Shutdown(shutdownCtx)
+	shutdown(srv, gs)
 	if mqttErr != nil {
 		return mqttErr
 	}
@@ -150,14 +192,113 @@ func cmdRun(args []string) error {
 	return nil
 }
 
+// runReplay serves the API from one recording: the app can be built
+// against real traffic with no broker and no house.  Records are fed
+// at their original pace divided by speed, then the server stays up
+// until interrupted.
+func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, eng policy.Engine, path string, speed float64) error {
+	recs, err := record.ReadAll(ctx, path)
+	if err != nil && !errors.Is(err, record.ErrTruncated) && !errors.Is(err, record.ErrCorrupt) {
+		return err
+	}
+	if err != nil {
+		log.Printf("replay: %v", err)
+	}
+	srv, gs := httpServer(cfg, st, nil)
+	go serve(srv, cfg.Listen)
+	log.Printf("replaying %d records from %s at %gx", len(recs), path, speed)
+	var prev time.Time
+	for _, r := range recs {
+		at := r.GetReceivedAt().AsTime()
+		if speed > 0 && !prev.IsZero() {
+			gap := time.Duration(float64(at.Sub(prev)) / speed)
+			if gap > 0 {
+				select {
+				case <-time.After(gap):
+				case <-ctx.Done():
+				}
+			}
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		prev = at
+		store.Feed(st, eng, r)
+	}
+	if ctx.Err() == nil {
+		s := st.Stats()
+		log.Printf("replay finished: %d events, %d live; serving until interrupted", s.Events, s.Live)
+		<-ctx.Done()
+	}
+	shutdown(srv, gs)
+	log.Print("clean shutdown")
+	return nil
+}
+
+// httpServer is the one listener: gRPC (h2c) for the API, plain HTTP
+// for /metrics, /healthz and /admin.  MediaManager's pattern: one
+// port, the reverse proxy in front.
+func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator) (*http.Server, *grpc.Server) {
+	gs := grpc.NewServer()
+	server.Register(gs, &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st})
+	mux := adminMux(rotator, st)
+	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			gs.ServeHTTP(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+	return &http.Server{Addr: cfg.Listen, Handler: h2c.NewHandler(root, &http2.Server{})}, gs
+}
+
+func serve(srv *http.Server, listen string) {
+	log.Printf("api, metrics and admin on %s", listen)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Printf("http: %v", err)
+	}
+}
+
+func shutdown(srv *http.Server, gs *grpc.Server) {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx) // open WatchEvents streams hold it until the deadline
+	gs.Stop()
+}
+
+// pruneHourly forgets events, and deletes recordings, past retention.
+func pruneHourly(ctx context.Context, st *store.Store, dir string) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			n := st.Prune(now)
+			files := 0
+			if dir != "" {
+				var errs []error
+				files, errs = store.PruneFiles(dir, st.Retention(), now)
+				for _, e := range errs {
+					log.Printf("prune: %v", e)
+				}
+			}
+			if n > 0 || files > 0 {
+				log.Printf("pruned %d events, %d recordings", n, files)
+			}
+		}
+	}
+}
+
 // adminMux serves metrics, health, and the one mutating endpoint:
 // POST /admin/rotate closes the current recording so it is complete
 // (indexed, with a footer) and readable right now.  Unauthenticated --
 // the listener is LAN only (docs/DESIGN.md).  rotator is nil when
 // recording is off.
-func adminMux(rotator *record.Rotator) *http.ServeMux {
+func adminMux(rotator *record.Rotator, st *store.Store) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", metrics.Handler(version))
+	mux.Handle("/metrics", metrics.Handler(version, st))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
 	mux.HandleFunc("POST /admin/rotate", func(w http.ResponseWriter, r *http.Request) {
 		if rotator == nil {

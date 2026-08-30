@@ -14,3 +14,5 @@ file:ci.yml
 file:Dockerfile
 # buf.lock pins the well-known-types module by commit and digest.
 file:buf.lock
+# Tests listen on loopback; that is not an address that leaks anything.
+127.0.0.1:0

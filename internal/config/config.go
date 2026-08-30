@@ -20,7 +20,9 @@ const (
 	DefaultPublishPrefix = "curtilage"
 	DefaultKeepalive     = 30 * time.Second
 	DefaultRotateEvery   = 24 * time.Hour
+	DefaultRetention     = 7 * 24 * time.Hour
 	DefaultListen        = ":9118"
+	DefaultDisplayName   = "curtilage"
 )
 
 // Load reads a textproto file, validates it, and fills defaults.
@@ -81,8 +83,16 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	} else if d := r.RotateEvery.AsDuration(); d < time.Minute {
 		return fmt.Errorf("recording.rotate_every %v too short (>= 1m)", d)
 	}
+	if r.Retention == nil {
+		r.Retention = durationpb.New(DefaultRetention)
+	} else if d := r.Retention.AsDuration(); d < time.Hour {
+		return fmt.Errorf("recording.retention %v too short (>= 1h)", d)
+	}
 	if cfg.Listen == "" {
 		cfg.Listen = DefaultListen
+	}
+	if cfg.DisplayName == "" {
+		cfg.DisplayName = DefaultDisplayName
 	}
 	return nil
 }
