@@ -38,7 +38,7 @@ func TestWriteThenReadRoundTrip(t *testing.T) {
 
 	in := make(chan *Record)
 	errc := make(chan error, 1)
-	go func() { errc <- Write(context.Background(), dir, 24*time.Hour, in) }()
+	go func() { errc <- Write(context.Background(), Options{Dir: dir, RotateEvery: 24 * time.Hour}, in) }()
 	for _, r := range want {
 		in <- r
 	}
@@ -73,7 +73,7 @@ func TestRotation(t *testing.T) {
 	dir := t.TempDir()
 	in := make(chan *Record)
 	errc := make(chan error, 1)
-	go func() { errc <- Write(context.Background(), dir, 50*time.Millisecond, in) }()
+	go func() { errc <- Write(context.Background(), Options{Dir: dir, RotateEvery: 50 * time.Millisecond}, in) }()
 	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("1")}
 	time.Sleep(120 * time.Millisecond)
 	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("2")}
@@ -93,12 +93,81 @@ func TestRotation(t *testing.T) {
 	}
 }
 
+func TestIdleRotation(t *testing.T) {
+	// No traffic after the first record: the timer alone must close
+	// the over-age file, and the next record must open a new one.
+	dir := t.TempDir()
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	go func() { errc <- Write(context.Background(), Options{Dir: dir, RotateEvery: 50 * time.Millisecond}, in) }()
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("1")}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if recs, err := ReadAll(context.Background(), firstFile(t, dir)); err == nil && len(recs) == 1 {
+			break // complete (footer present) without any further write
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("idle file was never rotated")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("2")}
+	close(in)
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	if files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap")); len(files) != 2 {
+		t.Fatalf("want 2 files, got %v", files)
+	}
+}
+
+func TestForcedRotation(t *testing.T) {
+	dir := t.TempDir()
+	in := make(chan *Record)
+	errc := make(chan error, 1)
+	rot := NewRotator()
+	go func() {
+		errc <- Write(context.Background(), Options{Dir: dir, RotateEvery: time.Hour, Rotate: rot.Chan()}, in)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if p, err := rot.Rotate(ctx); err != nil || p != "" {
+		t.Fatalf("rotate with no file open = %q, %v; want \"\", nil", p, err)
+	}
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("1")}
+	p, err := rot.Rotate(ctx)
+	if err != nil || p == "" {
+		t.Fatalf("rotate = %q, %v; want the closed file's path", p, err)
+	}
+	if recs, err := ReadAll(context.Background(), p); err != nil || len(recs) != 1 {
+		t.Fatalf("%s after forced rotation: %d records, %v", p, len(recs), err)
+	}
+	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("2")}
+	close(in)
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	if files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap")); len(files) != 2 {
+		t.Fatalf("want 2 files, got %v", files)
+	}
+}
+
+func firstFile(t *testing.T, dir string) string {
+	t.Helper()
+	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
+	if len(files) == 0 {
+		t.Fatal("no recording yet")
+	}
+	return files[0]
+}
+
 func TestCancelStillClosesFile(t *testing.T) {
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	in := make(chan *Record)
 	errc := make(chan error, 1)
-	go func() { errc <- Write(ctx, dir, time.Hour, in) }()
+	go func() { errc <- Write(ctx, Options{Dir: dir, RotateEvery: time.Hour}, in) }()
 	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("x")}
 	cancel() // abort path: no close(in), but the file must still be complete
 	if err := <-errc; err != nil {
@@ -132,7 +201,7 @@ func TestTruncatedFileStillYieldsRecords(t *testing.T) {
 	dir := t.TempDir()
 	in := make(chan *Record)
 	errc := make(chan error, 1)
-	go func() { errc <- Write(context.Background(), dir, time.Hour, in) }()
+	go func() { errc <- Write(context.Background(), Options{Dir: dir, RotateEvery: time.Hour}, in) }()
 	for _, r := range sample(20, time.Now()) {
 		in <- r
 	}

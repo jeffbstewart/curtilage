@@ -93,21 +93,17 @@ func cmdRun(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: metricsMux()}
-	go func() {
-		log.Printf("metrics on %s/metrics", cfg.Listen)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("http: %v", err)
-		}
-	}()
-
 	records := make(chan *record.Record, 1024)
 	recErr := make(chan error, 1)
+	var rotator *record.Rotator
 	if dir := cfg.Recording.GetDir(); dir != "" {
+		rotator = record.NewRotator()
 		go func() {
 			// Not ctx: the recorder must outlive the cancellation and
 			// finish the file on the closed channel.
-			recErr <- record.Write(context.Background(), dir, cfg.Recording.RotateEvery.AsDuration(), records)
+			recErr <- record.Write(context.Background(), record.Options{
+				Dir: dir, RotateEvery: cfg.Recording.RotateEvery.AsDuration(), Rotate: rotator.Chan(),
+			}, records)
 		}()
 		log.Printf("recording to %s (rotate every %s)", dir, cfg.Recording.RotateEvery.AsDuration())
 	} else {
@@ -117,6 +113,14 @@ func cmdRun(args []string) error {
 			recErr <- nil
 		}()
 	}
+
+	srv := &http.Server{Addr: cfg.Listen, Handler: adminMux(rotator)}
+	go func() {
+		log.Printf("metrics on %s/metrics", cfg.Listen)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("http: %v", err)
+		}
+	}()
 
 	m := cfg.Mqtt
 	mqttErr := mqtt.Run(ctx, mqtt.Options{
@@ -142,10 +146,34 @@ func cmdRun(args []string) error {
 	return nil
 }
 
-func metricsMux() *http.ServeMux {
+// adminMux serves metrics, health, and the one mutating endpoint:
+// POST /admin/rotate closes the current recording so it is complete
+// (indexed, with a footer) and readable right now.  Unauthenticated --
+// the listener is LAN only (docs/DESIGN.md).  rotator is nil when
+// recording is off.
+func adminMux(rotator *record.Rotator) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler(version))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
+	mux.HandleFunc("POST /admin/rotate", func(w http.ResponseWriter, r *http.Request) {
+		if rotator == nil {
+			http.Error(w, "recording is not enabled", http.StatusConflict)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		closed, err := rotator.Rotate(ctx)
+		if err != nil {
+			http.Error(w, "rotate: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		if closed == "" {
+			fmt.Fprintln(w, "no file open; the next message starts a new one")
+			return
+		}
+		log.Printf("rotated on request: closed %s", closed)
+		fmt.Fprintln(w, "closed "+closed)
+	})
 	return mux
 }
 
