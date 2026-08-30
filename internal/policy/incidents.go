@@ -187,27 +187,44 @@ func (e *Incidents) close(at time.Time) []Change {
 	return []Change{{OpEnded, e.build(inc, at, true)}}
 }
 
-// build is the event as the incident currently stands.
+// build is the event as the incident currently stands.  Members that
+// never touched a named zone still count (a real person crossing
+// between zones) but never ANCHOR the event's public face: the start
+// time, the first camera, and the snapshot come from zoned members,
+// so a misclassified parked car folded into a walk cannot become its
+// picture or its opening scene.
 func (e *Incidents) build(inc *incident, at time.Time, ended bool) Event {
 	first := inc.members[0]
 	ev := Event{
-		ID:        MintID("activity/" + first.source),
-		Kind:      KindActivity,
-		StartedAt: inc.first,
-		Path:      slices.Clone(inc.path),
-		Zones:     slices.Clone(inc.path),
-		Objects:   map[string]int{},
+		ID:      MintID("activity/" + first.source),
+		Kind:    KindActivity,
+		Path:    slices.Clone(inc.path),
+		Zones:   slices.Clone(inc.path),
+		Objects: map[string]int{},
 	}
 	var last time.Time
+	var unzonedCams []string
+	var anySnapshot string
 	anyClip := false
 	for _, m := range inc.members {
-		if !slices.Contains(ev.Cameras, m.camera) {
-			ev.Cameras = append(ev.Cameras, m.camera)
+		zoned := len(m.zones) > 0
+		if zoned {
+			if ev.StartedAt.IsZero() || m.start.Before(ev.StartedAt) {
+				ev.StartedAt = m.start
+			}
+			if !slices.Contains(ev.Cameras, m.camera) {
+				ev.Cameras = append(ev.Cameras, m.camera)
+			}
+			if m.snapshot && ev.SourceID == "" {
+				ev.SourceID, ev.HasSnapshot = m.source, true
+			}
+		} else if !slices.Contains(unzonedCams, m.camera) {
+			unzonedCams = append(unzonedCams, m.camera)
+		}
+		if m.snapshot && anySnapshot == "" {
+			anySnapshot = m.source
 		}
 		ev.SourceIDs = append(ev.SourceIDs, m.source)
-		if m.snapshot && ev.SourceID == "" {
-			ev.SourceID, ev.HasSnapshot = m.source, true
-		}
 		anyClip = anyClip || m.clip
 		end := m.end
 		if end.IsZero() {
@@ -217,6 +234,17 @@ func (e *Incidents) build(inc *incident, at time.Time, ended bool) Event {
 			last = end
 		}
 		ev.Objects[m.label] = max(ev.Objects[m.label], e.concurrent(inc, m, at))
+	}
+	if ev.StartedAt.IsZero() {
+		ev.StartedAt = inc.first // no zoned member (never emitted): moot
+	}
+	for _, c := range unzonedCams {
+		if !slices.Contains(ev.Cameras, c) {
+			ev.Cameras = append(ev.Cameras, c)
+		}
+	}
+	if ev.SourceID == "" && anySnapshot != "" {
+		ev.SourceID, ev.HasSnapshot = anySnapshot, true
 	}
 	if ev.SourceID == "" {
 		ev.SourceID = first.source
