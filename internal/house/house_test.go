@@ -72,8 +72,8 @@ func TestCallerAndAllow(t *testing.T) {
 		{"198.51.100.9:1234", "203.0.113.7", false},
 		{"198.51.100.9:1234", "203.0.113.7, 192.168.1.50", true},  // LAN client via proxy, forged prefix
 		{"198.51.100.9:1234", "192.168.1.50, 203.0.113.7", false}, // outsider via proxy, forged prefix
-		{"198.51.100.9:1234", "192.168.1.50, 198.51.100.9", true},   // proxy listed itself
-		{"198.51.100.9:1234", "", true},                          // the proxy itself (in allow)
+		{"198.51.100.9:1234", "192.168.1.50, 198.51.100.9", true}, // proxy listed itself
+		{"198.51.100.9:1234", "", true},                           // the proxy itself (in allow)
 		{"198.51.100.9:1234", "garbage", false},
 		{"nonsense", "", false},
 	}
