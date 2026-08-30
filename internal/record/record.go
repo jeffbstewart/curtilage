@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,6 +50,19 @@ var (
 func Stats() (records, files, errors uint64) {
 	return recordsWritten.Load(), filesOpened.Load(), writeErrors.Load()
 }
+
+// castagnoli is the CRC-32C table (the checksum protobuf, iSCSI and
+// ext4 use; hardware-accelerated on amd64/arm64).
+var castagnoli = crc32.MakeTable(crc32.Castagnoli)
+
+// Checksum is the end-to-end integrity check over a payload: set by
+// the recorder, verified by the reader (see record.proto).
+func Checksum(payload []byte) uint32 { return crc32.Checksum(payload, castagnoli) }
+
+// ErrCorrupt is returned by Read when at least one record's payload
+// did not match its checksum; such records are skipped, all others
+// are delivered.
+var ErrCorrupt = errors.New("payload checksum mismatch (record skipped)")
 
 // Write drains in into MCAP files under dir, starting a new file every
 // rotateEvery, until in is closed (clean shutdown) or ctx is cancelled
@@ -92,6 +106,7 @@ func Write(ctx context.Context, dir string, rotateEvery time.Duration, in <-chan
 			}
 			f = nf
 		}
+		rec.PayloadCrc32C = Checksum(rec.GetPayload()) // the recorder owns the checksum
 		if err := f.write(rec); err != nil {
 			writeErrors.Add(1)
 			continue
@@ -261,18 +276,16 @@ func Read(ctx context.Context, path string, out chan<- *Record) error {
 		}
 	}
 	var msg mcap.Message
+	corrupt := 0
 	for {
 		schema, _, m, err := it.NextInto(&msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				if truncated {
-					return fmt.Errorf("%s: %w", path, ErrTruncated)
-				}
-				return nil
+				return finish(path, truncated, corrupt)
 			}
 			if truncated {
 				// The torn tail: everything before it was delivered.
-				return fmt.Errorf("%s: %w", path, ErrTruncated)
+				return finish(path, true, corrupt)
 			}
 			return fmt.Errorf("%s: %w", path, err)
 		}
@@ -283,12 +296,29 @@ func Read(ctx context.Context, path string, out chan<- *Record) error {
 		if err := proto.Unmarshal(m.Data, rec); err != nil {
 			return fmt.Errorf("%s: record: %w", path, err)
 		}
+		if Checksum(rec.GetPayload()) != rec.GetPayloadCrc32C() {
+			corrupt++
+			continue
+		}
 		select {
 		case out <- rec:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+// finish turns the end-of-iteration state into Read's result.
+func finish(path string, truncated bool, corrupt int) error {
+	switch {
+	case corrupt > 0 && truncated:
+		return fmt.Errorf("%s: %d corrupt; %w; also %w", path, corrupt, ErrCorrupt, ErrTruncated)
+	case corrupt > 0:
+		return fmt.Errorf("%s: %d corrupt: %w", path, corrupt, ErrCorrupt)
+	case truncated:
+		return fmt.Errorf("%s: %w", path, ErrTruncated)
+	}
+	return nil
 }
 
 // ReadAll is Read into a slice, for tests and the replay summary.

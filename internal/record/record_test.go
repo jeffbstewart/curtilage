@@ -5,11 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 )
 
 func sample(n int, base time.Time) []*Record {
@@ -20,9 +23,10 @@ func sample(n int, base time.Time) []*Record {
 			ReceivedAt: timestamppb.New(base.Add(time.Duration(i) * time.Millisecond)),
 			Topic:      topics[i%len(topics)],
 			Retained:   i%3 == 2,
-			Qos:        uint32(i % 2),
+			Qos:        curtilagev1.Qos(i%3 + 1), // the three real levels, never UNSPECIFIED
 			Payload:    []byte{byte(i), 0xff, 0x00, byte(i * 7)}, // arbitrary bytes, not text
 		})
+		recs[i].PayloadCrc32C = Checksum(recs[i].Payload)
 	}
 	return recs
 }
@@ -154,4 +158,40 @@ func TestTruncatedFileStillYieldsRecords(t *testing.T) {
 		t.Fatal("no records recovered from the truncated file")
 	}
 	t.Logf("recovered %d of 20 records from a file cut to 2/3", len(recs))
+}
+
+func TestChecksumIsCRC32C(t *testing.T) {
+	// The CRC-32C check value from RFC 3720 (iSCSI) for "123456789".
+	if got := Checksum([]byte("123456789")); got != 0xE3069283 {
+		t.Fatalf("Checksum = %#x, want 0xE3069283 (Castagnoli)", got)
+	}
+}
+
+func TestCorruptRecordIsSkippedAndReported(t *testing.T) {
+	dir := t.TempDir()
+	f, err := open(dir, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := &Record{ReceivedAt: timestamppb.Now(), Topic: "t", Payload: []byte("good")}
+	good.PayloadCrc32C = Checksum(good.Payload)
+	bad := &Record{ReceivedAt: timestamppb.Now(), Topic: "t", Payload: []byte("bad"), PayloadCrc32C: 0xdeadbeef}
+	for _, r := range []*Record{good, bad, good} {
+		if err := f.write(r); err != nil { // bypasses Write's stamping on purpose
+			t.Fatal(err)
+		}
+	}
+	if err := f.close(); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := ReadAll(context.Background(), f.path)
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("want ErrCorrupt, got %v", err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("want the 2 good records delivered, got %d", len(recs))
+	}
+	if strings.Contains(err.Error(), "truncated") {
+		t.Errorf("a complete file must not also report truncation: %v", err)
+	}
 }

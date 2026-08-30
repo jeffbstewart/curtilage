@@ -15,7 +15,28 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
 
+// MQTT quality of service, as delivered.  A closed set with meaning
+// (MQTT 3.1.1 section 4.3): each level is a stronger delivery
+// guarantee than the one before it.
+enum Qos {
+  QOS_UNSPECIFIED = 0;
+  // Fire and forget: delivered at most once, may be lost.
+  QOS_AT_MOST_ONCE = 1;
+  // Acknowledged: delivered at least once, may be duplicated.
+  QOS_AT_LEAST_ONCE = 2;
+  // Assured: delivered exactly once (four-way handshake).
+  QOS_EXACTLY_ONCE = 3;
+}
+
 // One MQTT message as received.
+//
+// Integrity: MCAP chunks carry a CRC32 and curtilage writes them, but
+// the MCAP Go reader does NOT verify chunk CRCs by default (only the
+// lower-level lexer can), so the container's checksum is write-only in
+// practice.  payload_crc32c is therefore the check that counts: the
+// recorder computes it over the payload bytes it received and the
+// reader verifies it after decoding -- end to end, independent of the
+// container, its compression, or any future re-packaging.
 message Record {
   // When curtilage received it (its clock, not the broker's).
   google.protobuf.Timestamp received_at = 1;
@@ -24,8 +45,10 @@ message Record {
   // True when the broker delivered it as a retained message (the
   // state a subscriber gets on connect, not a live publish).
   bool retained = 3;
-  // MQTT QoS the message was delivered with (0, 1 or 2).
-  uint32 qos = 4;
+  // MQTT QoS the message was delivered with.
+  Qos qos = 4;
   // The payload, byte for byte.
   bytes payload = 5;
+  // CRC-32C (Castagnoli) of payload.
+  uint32 payload_crc32c = 6;
 }

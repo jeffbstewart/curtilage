@@ -161,10 +161,10 @@ func cmdReplay(args []string) error {
 	}
 	recs, err := record.ReadAll(context.Background(), *file)
 	if err != nil {
-		if !errors.Is(err, record.ErrTruncated) {
+		if !errors.Is(err, record.ErrTruncated) && !errors.Is(err, record.ErrCorrupt) {
 			return err
 		}
-		fmt.Printf("WARNING: %v\n", err) // the writer was killed before Close; what follows is what survived
+		fmt.Printf("WARNING: %v\n", err) // torn tail or bad checksums; what follows is what survived
 	}
 	if len(recs) == 0 {
 		fmt.Println("no records")

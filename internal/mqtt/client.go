@@ -19,6 +19,7 @@ import (
 	paho "github.com/eclipse/paho.mqtt.golang"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/record"
 )
 
@@ -93,12 +94,14 @@ func Run(ctx context.Context, o Options, out chan<- *record.Record) error {
 	}
 	handler := func(_ paho.Client, m paho.Message) {
 		count(m.Topic())
+		payload := append([]byte(nil), m.Payload()...)
 		rec := &record.Record{
-			ReceivedAt: timestamppb.Now(),
-			Topic:      m.Topic(),
-			Retained:   m.Retained(),
-			Qos:        uint32(m.Qos()),
-			Payload:    append([]byte(nil), m.Payload()...),
+			ReceivedAt:    timestamppb.Now(),
+			Topic:         m.Topic(),
+			Retained:      m.Retained(),
+			Qos:           qosEnum(m.Qos()),
+			Payload:       payload,
+			PayloadCrc32C: record.Checksum(payload),
 		}
 		select {
 		case out <- rec:
@@ -145,4 +148,17 @@ func Run(ctx context.Context, o Options, out chan<- *record.Record) error {
 	c.Disconnect(500) // ms: lets the offline publish flush
 	connected.Store(false)
 	return nil
+}
+
+// qosEnum maps the wire QoS (0..2) to the schema's named levels.
+func qosEnum(q byte) curtilagev1.Qos {
+	switch q {
+	case 0:
+		return curtilagev1.Qos_QOS_AT_MOST_ONCE
+	case 1:
+		return curtilagev1.Qos_QOS_AT_LEAST_ONCE
+	case 2:
+		return curtilagev1.Qos_QOS_EXACTLY_ONCE
+	}
+	return curtilagev1.Qos_QOS_UNSPECIFIED
 }

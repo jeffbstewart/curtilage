@@ -32,7 +32,73 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// MQTT quality of service, as delivered.  A closed set with meaning
+// (MQTT 3.1.1 section 4.3): each level is a stronger delivery
+// guarantee than the one before it.
+type Qos int32
+
+const (
+	Qos_QOS_UNSPECIFIED Qos = 0
+	// Fire and forget: delivered at most once, may be lost.
+	Qos_QOS_AT_MOST_ONCE Qos = 1
+	// Acknowledged: delivered at least once, may be duplicated.
+	Qos_QOS_AT_LEAST_ONCE Qos = 2
+	// Assured: delivered exactly once (four-way handshake).
+	Qos_QOS_EXACTLY_ONCE Qos = 3
+)
+
+// Enum value maps for Qos.
+var (
+	Qos_name = map[int32]string{
+		0: "QOS_UNSPECIFIED",
+		1: "QOS_AT_MOST_ONCE",
+		2: "QOS_AT_LEAST_ONCE",
+		3: "QOS_EXACTLY_ONCE",
+	}
+	Qos_value = map[string]int32{
+		"QOS_UNSPECIFIED":   0,
+		"QOS_AT_MOST_ONCE":  1,
+		"QOS_AT_LEAST_ONCE": 2,
+		"QOS_EXACTLY_ONCE":  3,
+	}
+)
+
+func (x Qos) Enum() *Qos {
+	p := new(Qos)
+	*p = x
+	return p
+}
+
+func (x Qos) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Qos) Descriptor() protoreflect.EnumDescriptor {
+	return file_curtilage_v1_record_proto_enumTypes[0].Descriptor()
+}
+
+func (Qos) Type() protoreflect.EnumType {
+	return &file_curtilage_v1_record_proto_enumTypes[0]
+}
+
+func (x Qos) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Qos.Descriptor instead.
+func (Qos) EnumDescriptor() ([]byte, []int) {
+	return file_curtilage_v1_record_proto_rawDescGZIP(), []int{0}
+}
+
 // One MQTT message as received.
+//
+// Integrity: MCAP chunks carry a CRC32 and curtilage writes them, but
+// the MCAP Go reader does NOT verify chunk CRCs by default (only the
+// lower-level lexer can), so the container's checksum is write-only in
+// practice.  payload_crc32c is therefore the check that counts: the
+// recorder computes it over the payload bytes it received and the
+// reader verifies it after decoding -- end to end, independent of the
+// container, its compression, or any future re-packaging.
 type Record struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// When curtilage received it (its clock, not the broker's).
@@ -42,10 +108,12 @@ type Record struct {
 	// True when the broker delivered it as a retained message (the
 	// state a subscriber gets on connect, not a live publish).
 	Retained bool `protobuf:"varint,3,opt,name=retained,proto3" json:"retained,omitempty"`
-	// MQTT QoS the message was delivered with (0, 1 or 2).
-	Qos uint32 `protobuf:"varint,4,opt,name=qos,proto3" json:"qos,omitempty"`
+	// MQTT QoS the message was delivered with.
+	Qos Qos `protobuf:"varint,4,opt,name=qos,proto3,enum=curtilage.v1.Qos" json:"qos,omitempty"`
 	// The payload, byte for byte.
-	Payload       []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
+	// CRC-32C (Castagnoli) of payload.
+	PayloadCrc32C uint32 `protobuf:"varint,6,opt,name=payload_crc32c,json=payloadCrc32c,proto3" json:"payload_crc32c,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -101,11 +169,11 @@ func (x *Record) GetRetained() bool {
 	return false
 }
 
-func (x *Record) GetQos() uint32 {
+func (x *Record) GetQos() Qos {
 	if x != nil {
 		return x.Qos
 	}
-	return 0
+	return Qos_QOS_UNSPECIFIED
 }
 
 func (x *Record) GetPayload() []byte {
@@ -115,18 +183,31 @@ func (x *Record) GetPayload() []byte {
 	return nil
 }
 
+func (x *Record) GetPayloadCrc32C() uint32 {
+	if x != nil {
+		return x.PayloadCrc32C
+	}
+	return 0
+}
+
 var File_curtilage_v1_record_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_record_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/record.proto\x12\fcurtilage.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x01\n" +
+	"\x19curtilage/v1/record.proto\x12\fcurtilage.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x01\n" +
 	"\x06Record\x12;\n" +
 	"\vreceived_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"receivedAt\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x1a\n" +
-	"\bretained\x18\x03 \x01(\bR\bretained\x12\x10\n" +
-	"\x03qos\x18\x04 \x01(\rR\x03qos\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayloadB\xb0\x01\n" +
+	"\bretained\x18\x03 \x01(\bR\bretained\x12#\n" +
+	"\x03qos\x18\x04 \x01(\x0e2\x11.curtilage.v1.QosR\x03qos\x12\x18\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\x12%\n" +
+	"\x0epayload_crc32c\x18\x06 \x01(\rR\rpayloadCrc32c*]\n" +
+	"\x03Qos\x12\x13\n" +
+	"\x0fQOS_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10QOS_AT_MOST_ONCE\x10\x01\x12\x15\n" +
+	"\x11QOS_AT_LEAST_ONCE\x10\x02\x12\x14\n" +
+	"\x10QOS_EXACTLY_ONCE\x10\x03B\xb0\x01\n" +
 	"\x10com.curtilage.v1B\vRecordProtoP\x01Z>github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1\xa2\x02\x03CXX\xaa\x02\fCurtilage.V1\xca\x02\fCurtilage\\V1\xe2\x02\x18Curtilage\\V1\\GPBMetadata\xea\x02\rCurtilage::V1b\x06proto3"
 
 var (
@@ -141,18 +222,21 @@ func file_curtilage_v1_record_proto_rawDescGZIP() []byte {
 	return file_curtilage_v1_record_proto_rawDescData
 }
 
+var file_curtilage_v1_record_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_curtilage_v1_record_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_curtilage_v1_record_proto_goTypes = []any{
-	(*Record)(nil),                // 0: curtilage.v1.Record
-	(*timestamppb.Timestamp)(nil), // 1: google.protobuf.Timestamp
+	(Qos)(0),                      // 0: curtilage.v1.Qos
+	(*Record)(nil),                // 1: curtilage.v1.Record
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_curtilage_v1_record_proto_depIdxs = []int32{
-	1, // 0: curtilage.v1.Record.received_at:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: curtilage.v1.Record.received_at:type_name -> google.protobuf.Timestamp
+	0, // 1: curtilage.v1.Record.qos:type_name -> curtilage.v1.Qos
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_record_proto_init() }
@@ -165,13 +249,14 @@ func file_curtilage_v1_record_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_curtilage_v1_record_proto_rawDesc), len(file_curtilage_v1_record_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_curtilage_v1_record_proto_goTypes,
 		DependencyIndexes: file_curtilage_v1_record_proto_depIdxs,
+		EnumInfos:         file_curtilage_v1_record_proto_enumTypes,
 		MessageInfos:      file_curtilage_v1_record_proto_msgTypes,
 	}.Build()
 	File_curtilage_v1_record_proto = out.File
