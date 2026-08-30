@@ -34,7 +34,7 @@ func mediaServer(t *testing.T) (*Server, *httptest.Server) {
 			w.Write(jpeg)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/a/start/") && strings.HasSuffix(r.URL.Path, "/clip.mp4") {
+		if strings.HasPrefix(r.URL.Path, "/api/cam-a/start/") && strings.HasSuffix(r.URL.Path, "/clip.mp4") {
 			w.Header().Set("Content-Type", "video/mp4")
 			w.Write([]byte("mp4" + r.URL.Path))
 			return
@@ -52,8 +52,8 @@ func mediaServer(t *testing.T) (*Server, *httptest.Server) {
 	}
 	st := store.New(time.Hour)
 	now := time.Now()
-	st.Apply(now, policy.Change{Op: policy.OpStarted, Event: policy.Event{ID: "with", Camera: "a", Label: "car", Kind: policy.KindDetection, StartedAt: now, HasSnapshot: true, SourceID: "src-with"}})
-	st.Apply(now, policy.Change{Op: policy.OpStarted, Event: policy.Event{ID: "without", Camera: "a", Label: "car", Kind: policy.KindDetection, StartedAt: now, SourceID: "src-without"}})
+	st.Apply(now, policy.Change{Op: policy.OpStarted, Event: policy.Event{ID: "with", Camera: "cam-a", Label: "car", Kind: policy.KindDetection, StartedAt: now, HasSnapshot: true, SourceID: "src-with"}})
+	st.Apply(now, policy.Change{Op: policy.OpStarted, Event: policy.Event{ID: "without", Camera: "cam-a", Label: "car", Kind: policy.KindDetection, StartedAt: now, SourceID: "src-without"}})
 	return &Server{Version: "test", Store: st, Frigate: fc, Keys: kr, LinkTTL: time.Hour}, fr
 }
 
@@ -135,7 +135,7 @@ func TestGetMediaClip(t *testing.T) {
 		got = append(got, msg.GetChunk()...)
 	}
 	// The stub echoes the path: leading camera "a", padded range.
-	if !strings.HasPrefix(string(got), "mp4/api/a/start/") {
+	if !strings.HasPrefix(string(got), "mp4/api/cam-a/start/") {
 		t.Errorf("clip body %q", got)
 	}
 	// The capability path serves the same clip.
@@ -152,7 +152,7 @@ func TestGetMediaClip(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "video/mp4" || !strings.HasPrefix(string(body), "mp4/api/a/") {
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "video/mp4" || !strings.HasPrefix(string(body), "mp4/api/cam-a/") {
 		t.Errorf("clip link -> %d %s %q", resp.StatusCode, resp.Header.Get("Content-Type"), body[:min(len(body), 40)])
 	}
 }
