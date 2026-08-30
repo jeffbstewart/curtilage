@@ -39,9 +39,13 @@ type Config struct {
 	// "curtilage" if unset.
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// Frigate's HTTP API, for media.  Media is off when unset.
-	Frigate       *Frigate `protobuf:"bytes,5,opt,name=frigate,proto3" json:"frigate,omitempty"`
-	Links         *Links   `protobuf:"bytes,6,opt,name=links,proto3" json:"links,omitempty"`
-	House         *House   `protobuf:"bytes,7,opt,name=house,proto3" json:"house,omitempty"`
+	Frigate *Frigate `protobuf:"bytes,5,opt,name=frigate,proto3" json:"frigate,omitempty"`
+	Links   *Links   `protobuf:"bytes,6,opt,name=links,proto3" json:"links,omitempty"`
+	House   *House   `protobuf:"bytes,7,opt,name=house,proto3" json:"house,omitempty"`
+	// IANA time zone for anything a person reads (the house page):
+	// "America/New_York".  UTC if unset.  The zone database is built
+	// into the binary, so this needs nothing from the container.
+	Timezone      string `protobuf:"bytes,8,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -123,6 +127,13 @@ func (x *Config) GetHouse() *House {
 		return x.House
 	}
 	return nil
+}
+
+func (x *Config) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
 }
 
 // The in-the-house page, GET /house/: the last day of events with the
@@ -446,7 +457,7 @@ var File_curtilage_v1_config_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xa9\x02\n" +
+	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xc5\x02\n" +
 	"\x06Config\x12&\n" +
 	"\x04mqtt\x18\x01 \x01(\v2\x12.curtilage.v1.MqttR\x04mqtt\x125\n" +
 	"\trecording\x18\x02 \x01(\v2\x17.curtilage.v1.RecordingR\trecording\x12\x16\n" +
@@ -454,7 +465,8 @@ const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12/\n" +
 	"\afrigate\x18\x05 \x01(\v2\x15.curtilage.v1.FrigateR\afrigate\x12)\n" +
 	"\x05links\x18\x06 \x01(\v2\x13.curtilage.v1.LinksR\x05links\x12)\n" +
-	"\x05house\x18\a \x01(\v2\x13.curtilage.v1.HouseR\x05house\"Q\n" +
+	"\x05house\x18\a \x01(\v2\x13.curtilage.v1.HouseR\x05house\x12\x1a\n" +
+	"\btimezone\x18\b \x01(\tR\btimezone\"Q\n" +
 	"\x05House\x12\x1f\n" +
 	"\vallow_cidrs\x18\x01 \x03(\tR\n" +
 	"allowCidrs\x12'\n" +

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata" // the zone database in the binary: FROM scratch has none
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -98,6 +99,12 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = DefaultDisplayName
 	}
+	if cfg.Timezone == "" {
+		cfg.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(cfg.Timezone); err != nil {
+		return fmt.Errorf("timezone: %w", err)
+	}
 	if _, err := ParseCIDRs(cfg.GetHouse().GetAllowCidrs()); err != nil {
 		return fmt.Errorf("house.allow_cidrs: %w", err)
 	}
@@ -113,6 +120,15 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 		return fmt.Errorf("links.ttl %v out of range (1m..7d)", d)
 	}
 	return nil
+}
+
+// Location is the configured time zone; Load has already validated it.
+func Location(cfg *curtilagev1.Config) *time.Location {
+	loc, err := time.LoadLocation(cfg.GetTimezone())
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 // ParseCIDRs parses "a.b.c.d/n" (or v6) entries; a bare address is

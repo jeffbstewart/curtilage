@@ -31,7 +31,9 @@ the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,
 `?hours=N` widens the window) -- served only to `house.allow_cidrs`,
 with `X-Forwarded-For` believed only from `house.trusted_proxies`.
-It is the tool the rules are tuned with.  Recordings are
+It is the tool the rules are tuned with.  Times on it are in the
+configured `timezone` (IANA name; the zone database is compiled into
+the binary, so the container needs none).  Recordings are
 MCAP files, one channel per MQTT topic, `curtilage.v1.Record`
 messages with the schema embedded -- `mcap info` and Foxglove read
 them directly.  On `listen`: `/metrics` (Prometheus), `/healthz`, and

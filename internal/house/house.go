@@ -34,8 +34,18 @@ type Handler struct {
 	Allow       []*net.IPNet
 	Proxies     []*net.IPNet
 	DisplayName string
+	// Location is the household's time zone (config timezone); nil
+	// means UTC.  Nobody wants to do time zone math on this page.
+	Location *time.Location
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
+}
+
+func (h *Handler) loc() *time.Location {
+	if h.Location == nil {
+		return time.UTC
+	}
+	return h.Location
 }
 
 // DefaultWindow is how far back the page looks unless asked (?hours=).
@@ -112,6 +122,7 @@ type page struct {
 	All         bool // every event, not just the sent ones
 	Since       string
 	Now         string
+	Zone        string // the time zone every time on the page is in
 	Rows        []row
 	Total       int // events in the window
 	Hidden      int // of those, not shown (not sent; view=sent)
@@ -152,7 +163,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	all := r.URL.Query().Get("view") == "all"
 
 	p := page{DisplayName: h.DisplayName, Hours: int(window / time.Hour), All: all,
-		Since: since.Local().Format(time.RFC1123), Now: now.Local().Format(time.RFC1123)}
+		Since: since.In(h.loc()).Format(time.RFC1123), Now: now.In(h.loc()).Format(time.RFC1123), Zone: h.loc().String()}
 	audiences, verdicts := map[string]int{}, map[string]int{}
 	token := ""
 	for {
@@ -196,7 +207,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) row(e policy.Event, now time.Time) row {
 	rw := row{
-		When:     e.StartedAt.Local().Format("Mon 15:04:05"),
+		When:     e.StartedAt.In(h.loc()).Format("Mon 15:04:05"),
 		Camera:   e.Camera,
 		Label:    e.Label,
 		Zones:    strings.Join(e.Zones, ", "),
@@ -253,7 +264,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  .src { color: #999; font-size: .75rem; font-family: ui-monospace, monospace; }
 </style>
 <h1>{{.DisplayName}}: the last {{.Hours}} hours</h1>
-<div class="sub">{{.Since}} to {{.Now}}. {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
+<div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
 {{if .All}}Showing <b>everything</b>, including what was not sent. <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> not sent are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
 <div class="sum">
  <div><b>By audience</b>{{range .ByAudience}}{{.Name}}: {{.N}}<br>{{end}}</div>
