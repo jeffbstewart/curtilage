@@ -24,7 +24,13 @@ media links `CURTILAGE_MEDIA_KEY` (current) / `CURTILAGE_MEDIA_KEY_PRIOR`
 (during a rotation), each `openssl rand -base64 32`, the same on every
 instance.  Media (snapshots, from `frigate.url`) is served by the API's
 `GetMedia` and by capability links, `GET /media/<token>`, that authorise
-one event's media for `links.ttl` and 404 identically for anything else.  Recordings are
+one event's media for `links.ttl` and 404 identically for anything else.
+`GET /house/` is the in-the-house page -- the last day of events with
+the policy engine's verdict and audience for each (what was sent, or
+would have been, to whom; `?view=all` includes what was not sent,
+`?hours=N` widens the window) -- served only to `house.allow_cidrs`,
+with `X-Forwarded-For` believed only from `house.trusted_proxies`.
+It is the tool the rules are tuned with.  Recordings are
 MCAP files, one channel per MQTT topic, `curtilage.v1.Record`
 messages with the schema embedded -- `mcap info` and Foxglove read
 them directly.  On `listen`: `/metrics` (Prometheus), `/healthz`, and

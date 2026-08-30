@@ -16,3 +16,9 @@ file:Dockerfile
 file:buf.lock
 # Tests listen on loopback; that is not an address that leaks anything.
 127.0.0.1:0
+# The house page's tests are made of addresses (RFC 5737 / 1918 examples).
+file:house_test.go
+# Example config and schema comments use RFC 1918 / 5737 example ranges.
+192.168.1.0/24
+198.51.100.0/24
+192.168.1.1

@@ -4,7 +4,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/encoding/prototext"
@@ -96,6 +98,12 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = DefaultDisplayName
 	}
+	if _, err := ParseCIDRs(cfg.GetHouse().GetAllowCidrs()); err != nil {
+		return fmt.Errorf("house.allow_cidrs: %w", err)
+	}
+	if _, err := ParseCIDRs(cfg.GetHouse().GetTrustedProxies()); err != nil {
+		return fmt.Errorf("house.trusted_proxies: %w", err)
+	}
 	if cfg.Links == nil {
 		cfg.Links = &curtilagev1.Links{}
 	}
@@ -105,6 +113,31 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 		return fmt.Errorf("links.ttl %v out of range (1m..7d)", d)
 	}
 	return nil
+}
+
+// ParseCIDRs parses "a.b.c.d/n" (or v6) entries; a bare address is
+// taken as a /32 (/128).
+func ParseCIDRs(entries []string) ([]*net.IPNet, error) {
+	var out []*net.IPNet
+	for _, e := range entries {
+		if !strings.Contains(e, "/") {
+			ip := net.ParseIP(e)
+			if ip == nil {
+				return nil, fmt.Errorf("%q is not an address or CIDR", e)
+			}
+			bits := 32
+			if ip.To4() == nil {
+				bits = 128
+			}
+			e = fmt.Sprintf("%s/%d", ip, bits)
+		}
+		_, n, err := net.ParseCIDR(e)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 // Credentials come from the environment, never the file.
