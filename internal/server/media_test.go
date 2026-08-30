@@ -76,11 +76,16 @@ func TestGetMediaStreamsSnapshot(t *testing.T) {
 		if msg.GetInfo() != nil {
 			t.Fatal("info after the first message")
 		}
+		if len(msg.GetChunk()) > chunkSize {
+			t.Fatalf("chunk of %d bytes exceeds %d", len(msg.GetChunk()), chunkSize)
+		}
 		got = append(got, msg.GetChunk()...)
 		chunks++
 	}
-	if !bytes.Equal(got, jpeg) || chunks != 4 {
-		t.Errorf("got %d bytes in %d chunks, want %d in 4", len(got), chunks, len(jpeg))
+	// Chunk count depends on how the socket delivers the body (short
+	// reads are normal); at least four are needed for this size.
+	if !bytes.Equal(got, jpeg) || chunks < 4 {
+		t.Errorf("got %d bytes in %d chunks, want %d in >= 4", len(got), chunks, len(jpeg))
 	}
 
 	for name, req := range map[string]*curtilagev1.GetMediaRequest{
