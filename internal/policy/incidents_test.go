@@ -61,7 +61,10 @@ func TestWalkOutIsOneActivity(t *testing.T) {
 	if a.Objects["person"] != 2 || a.Objects["dog"] != 1 {
 		t.Errorf("objects = %v, want 2 persons and a dog", a.Objects)
 	}
-	if len(a.Cameras) < 5 || a.Camera != "porch-west" {
+	// The first camera is the first ZONED sighting (porch-north's yard,
+	// 16:04:51); porch-west saw an unzoned person two seconds earlier
+	// and rides along without anchoring.
+	if len(a.Cameras) < 5 || a.Camera != "porch-north" {
 		t.Errorf("cameras = %v (first %s)", a.Cameras, a.Camera)
 	}
 	if !a.HasSnapshot || a.Clip != ClipFinal || a.Label != "person" {
@@ -141,6 +144,42 @@ func TestSeparateWalksAndQuietMorning(t *testing.T) {
 	}
 	if len(ids) != 2 {
 		t.Errorf("%d distinct activities across both walks, want 2", len(ids))
+	}
+}
+
+// The solo walk: a parked car misclassified as a person (unzoned,
+// with a snapshot, 40 s before the real walk) folds into the activity
+// but must not anchor it.
+func TestSoloWalkAnchorsOnZonedMembers(t *testing.T) {
+	_, final := run(t, NewIncidents(IncidentConfig{}), fixture.WalkSolo)
+	acts := activities(final)
+	if len(acts) != 1 {
+		t.Fatalf("%d activities, want 1", len(acts))
+	}
+	a := acts[0]
+	t.Logf("final: %s | started=%s camera=%s snap-src=%s cameras=%v", Describe(a), a.StartedAt.Format("15:04:05"), a.Camera, a.SourceID, a.Cameras)
+	const misclassified = "1788116806.144034-ov0cf6" // driveway-winchester "person", the parked car
+	if a.SourceID == misclassified {
+		t.Error("the parked car owns the snapshot")
+	}
+	if a.Camera == "driveway-winchester" {
+		t.Errorf("the parked car's camera leads: %v", a.Cameras)
+	}
+	// The walk's public start is the first zoned sighting (19:07:29,
+	// porch-north), not the misclassification at 19:06:46.
+	if a.StartedAt.Before(time.Date(2026, 8, 30, 19, 7, 20, 0, time.UTC)) {
+		t.Errorf("started at %s, anchored by the misclassification", a.StartedAt.Format("15:04:05"))
+	}
+	if !slices.Contains(a.SourceIDs, misclassified) {
+		t.Error("the misclassification should still be a member (supporting cast)")
+	}
+	if !a.HasSnapshot || a.Objects["person"] < 1 {
+		t.Errorf("snapshot=%v objects=%v", a.HasSnapshot, a.Objects)
+	}
+	// This fixture predates the disjoint porch/yard geometry, so the
+	// path still opens with yard; the geometry fix owns that half.
+	if len(a.Path) == 0 || a.Path[len(a.Path)-1] != "driveway" {
+		t.Errorf("path = %v", a.Path)
 	}
 }
 

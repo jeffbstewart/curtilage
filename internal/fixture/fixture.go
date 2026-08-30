@@ -46,6 +46,16 @@ const (
 	WalkBack = "walk-back-20260830T1627.mcap"
 )
 
+// WalkSolo is one person's quick loop (2026-08-30 19:07:26-19:09:33
+// UTC), PRECEDED at 19:06:46 by a parked car on driveway-winchester
+// misclassified as a person for 33 s, never in any zone, with a
+// snapshot.  The engine folds that prelude into the walk (it is
+// within the gap), and the fixture pins what must NOT happen: the
+// unzoned misclassification owning the event's snapshot, start time,
+// or first camera.  Cut as the walks above, window
+// 2026-08-30T19:05:00Z .. 19:12:00Z of curtilage-20260830T190448Z.
+const WalkSolo = "walk-solo-20260830T1906.mcap"
+
 // Path is the on-disk path of a fixture.
 func Path(t testing.TB, name string) string {
 	t.Helper()
