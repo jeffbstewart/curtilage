@@ -4,6 +4,14 @@ modules:
 lint:
   use:
     - STANDARD
+  # House convention: an enum's zero value is <NAME>_UNKNOWN and is
+  # never sent.  Qos (record.proto) predates it and is embedded in
+  # every recording as QOS_UNSPECIFIED; renaming it would be a breaking
+  # change for no gain, so that one file keeps the older suffix.
+  enum_zero_value_suffix: _UNKNOWN
+  ignore_only:
+    ENUM_ZERO_VALUE_SUFFIX:
+      - curtilage/v1/record.proto
 breaking:
   use:
     - FILE

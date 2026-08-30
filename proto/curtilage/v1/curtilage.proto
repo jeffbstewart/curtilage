@@ -2,17 +2,43 @@
 // the app (docs/DESIGN.md "Presentation").  Additive changes only:
 // buf breaking runs against main in CI.
 //
-// Only the handshake exists yet; the rest arrives with the phases.
+// Shape: the app sees EVENTS -- things the policy engine decided are
+// worth a look -- never raw Frigate.  An Event is presentation-shaped
+// (what happened, where, when, what there is to see), so the policy
+// engine can change how it decides without the app changing how it
+// shows.  Media (the snapshot now; clips later) streams by event id.
+//
+// Enrolment, preservation and feedback are not here yet; they arrive
+// with their phases rather than as placeholders.
+//
+// Enum convention: every enum's zero value is <NAME>_UNKNOWN and is
+// never sent; a reader that sees it has a message from a server that
+// did not set the field.
 syntax = "proto3";
 
 package curtilage.v1;
 
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
 
-// ServerInfo lets an app say "your server is too old" gracefully, and
-// tells it which features this server offers before it asks for them.
 service CurtilageService {
+  // Handshake: version and capabilities, so an app can say "your
+  // server is too old" before it asks for anything else.
   rpc GetServerInfo(GetServerInfoRequest) returns (GetServerInfoResponse);
+
+  // Events in a time range, newest first, paged.  The range is
+  // bounded by the server's retention (GetServerInfoResponse.retention).
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+
+  // Follow events as they start, change and end.  Optionally replays
+  // recent history first, so a client that reconnects misses nothing.
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+
+  // One piece of media for one event, streamed in chunks: the first
+  // message describes it, the rest carry bytes.
+  rpc GetMedia(GetMediaRequest) returns (stream GetMediaResponse);
 }
 
 message GetServerInfoRequest {}
@@ -27,4 +53,134 @@ message GetServerInfoResponse {
   // Human-readable name of this installation (never a hostname the
   // app should connect to; that comes from enrolment).
   string display_name = 4;
+  // How far back events and their media are kept.  Older than this is
+  // gone: there is no archive to subpoena.
+  google.protobuf.Duration retention = 5;
+}
+
+// What the policy engine decided an event is.
+enum EventKind {
+  EVENT_KIND_UNKNOWN = 0;
+  // Something new is here: a tracked object arrived in a zone that
+  // matters and stayed long enough to be real.
+  EVENT_KIND_ARRIVAL = 1;
+  // Something that was here left.
+  EVENT_KIND_DEPARTURE = 2;
+  // A package appeared (state classifier absent -> present).
+  EVENT_KIND_PACKAGE = 3;
+  // A tracked object the engine passed through without a stronger
+  // verdict.  The list is built on these; pushes are not.
+  EVENT_KIND_DETECTION = 4;
+}
+
+// Whether there is a clip to play, and whether it is still growing.
+enum ClipState {
+  CLIP_STATE_UNKNOWN = 0;
+  // No clip for this event (yet, or ever).
+  CLIP_STATE_NONE = 1;
+  // The event is running; the clip covers [start, now] and extends.
+  CLIP_STATE_GROWING = 2;
+  // The event ended and the clip is complete.
+  CLIP_STATE_FINAL = 3;
+}
+
+// One thing that happened in the curtilage.
+message Event {
+  // Opaque, server-minted, stable for the event's lifetime.  Never
+  // guessable: media is fetched by this id.
+  string id = 1;
+  // Camera name as the household configured it, e.g. "porch-east".
+  string camera = 2;
+  // Object label from perception: "car", "person", "package", ...
+  string label = 3;
+  // Classifier refinement of the label ("blue minivan"), or empty.
+  string sub_label = 4;
+  // Zones the object was in, as the household named them.
+  repeated string zones = 5;
+  EventKind kind = 6;
+  google.protobuf.Timestamp started_at = 7;
+  // Unset while the event is still running.
+  google.protobuf.Timestamp ended_at = 8;
+  // A snapshot can be fetched (GetMedia with MEDIA_SNAPSHOT).
+  bool has_snapshot = 9;
+  ClipState clip = 10;
+  // The perception layer's own id for the underlying object (a
+  // Frigate event id).  For tuning and debugging, not for display.
+  string source_id = 11;
+}
+
+message ListEventsRequest {
+  // Events that started at or after this time.  Unset: as far back as
+  // retention goes.
+  google.protobuf.Timestamp since = 1;
+  // Events that started before this time.  Unset: now.
+  google.protobuf.Timestamp until = 2;
+  // Only these cameras; empty means all.
+  repeated string cameras = 3;
+  // Page size; the server caps it.  Zero means the server's default.
+  uint32 page_size = 4;
+  // From a previous response; empty for the first page.
+  string page_token = 5;
+}
+
+message ListEventsResponse {
+  // Newest first.
+  repeated Event events = 1;
+  // Empty when this was the last page.
+  string next_page_token = 2;
+}
+
+// How an event changed.
+enum EventChange {
+  EVENT_CHANGE_UNKNOWN = 0;
+  // A new event; the Event is complete as of now.
+  EVENT_CHANGE_STARTED = 1;
+  // Something about a running event changed (zones, sub-label, kind,
+  // media availability).  The Event is the whole current state, not
+  // a delta.
+  EVENT_CHANGE_UPDATED = 2;
+  // The event ended; ended_at is set.
+  EVENT_CHANGE_ENDED = 3;
+}
+
+message WatchEventsRequest {
+  // Replay changes since this time before following live ones, so a
+  // reconnecting client catches up.  Unset: live only.
+  google.protobuf.Timestamp since = 1;
+  // Only these cameras; empty means all.
+  repeated string cameras = 2;
+}
+
+message WatchEventsResponse {
+  EventChange change = 1;
+  // The event's whole current state.
+  Event event = 2;
+}
+
+// Which media of an event is wanted.
+enum Media {
+  MEDIA_UNKNOWN = 0;
+  // The still image of the object, with its bounding box: JPEG.
+  MEDIA_SNAPSHOT = 1;
+}
+
+message GetMediaRequest {
+  string event_id = 1;
+  Media media = 2;
+}
+
+// First message: info.  Every message after it: chunk.
+message GetMediaResponse {
+  oneof payload {
+    MediaInfo info = 1;
+    bytes chunk = 2;
+  }
+}
+
+message MediaInfo {
+  // MIME type, e.g. "image/jpeg".
+  string content_type = 1;
+  // Total bytes to follow, when known; zero when the media is still
+  // growing.
+  uint64 size = 2;
 }

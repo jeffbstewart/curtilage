@@ -191,9 +191,13 @@ go2rtc's HLS for live (~2 s, no library), and a server stream for
 "the clip is growing" so nothing polls.
 
 The API is **gRPC over HTTP/2** behind the household's reverse proxy
-(the established house pattern): `Enrol`, `GetServerInfo`,
-`ListEvents`, `WatchEvent`, `GetMedia`, `Preserve`, `Feedback`.
-QUIC is a later config change, not a v1 feature.
+(the established house pattern, as MediaManager: native gRPC on the
+one port, grpc-swift on the phone): `GetServerInfo`, `ListEvents`,
+`WatchEvents`, `GetMedia` now (`proto/curtilage/v1/curtilage.proto`);
+enrolment, preserve and feedback arrive with their phases rather than
+as placeholders.  Events are presentation-shaped, so the policy engine
+can change its mind without the app changing its screens.  QUIC is a
+later config change, not a v1 feature.
 
 The **web page** is the fallback and the reviewer's first view: a
 capability link opens the event -- snapshot with bounding box, the
