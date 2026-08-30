@@ -25,6 +25,7 @@ media links `CURTILAGE_MEDIA_KEY` (current) / `CURTILAGE_MEDIA_KEY_PRIOR`
 instance.  Media (snapshots, from `frigate.url`) is served by the API's
 `GetMedia` and by capability links, `GET /media/<token>`, that authorise
 one event's media for `links.ttl` and 404 identically for anything else.
+`GET /` is a landing page naming the installation and its pages.
 `GET /house/` is the in-the-house page -- the last day of events with
 the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,
