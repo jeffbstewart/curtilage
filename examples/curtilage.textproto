@@ -21,3 +21,11 @@ recording {
 }
 
 listen: ":9118"                          # /metrics and /healthz
+
+# Media: snapshots come from Frigate's HTTP API; nothing is passed
+# through unexamined.  Leave frigate unset to serve no media.
+frigate { url: "http://frigate.cameras.svc.cluster.local:5000" }
+# Capability links (GET /media/<token>) stay valid this long.  The
+# signing keys are environment Secrets, not here: CURTILAGE_MEDIA_KEY
+# and, during a rotation, CURTILAGE_MEDIA_KEY_PRIOR.
+links { ttl { seconds: 14400 } }

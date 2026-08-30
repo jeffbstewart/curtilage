@@ -18,8 +18,13 @@ Status: phase 1 (ingest + record).  See [docs/DESIGN.md](docs/DESIGN.md).
     curtilage version
 
 Configuration is protobuf text format (`examples/curtilage.textproto`,
-schema `proto/curtilage/v1/config.proto`); credentials come from
-`CURTILAGE_MQTT_USER` / `CURTILAGE_MQTT_PASSWORD`.  Recordings are
+schema `proto/curtilage/v1/config.proto`); credentials come from the
+environment: `CURTILAGE_MQTT_USER` / `CURTILAGE_MQTT_PASSWORD`, and for
+media links `CURTILAGE_MEDIA_KEY` (current) / `CURTILAGE_MEDIA_KEY_PRIOR`
+(during a rotation), each `openssl rand -base64 32`, the same on every
+instance.  Media (snapshots, from `frigate.url`) is served by the API's
+`GetMedia` and by capability links, `GET /media/<token>`, that authorise
+one event's media for `links.ttl` and 404 identically for anything else.  Recordings are
 MCAP files, one channel per MQTT topic, `curtilage.v1.Record`
 messages with the schema embedded -- `mcap info` and Foxglove read
 them directly.  On `listen`: `/metrics` (Prometheus), `/healthz`, and

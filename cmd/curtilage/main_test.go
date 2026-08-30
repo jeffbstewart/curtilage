@@ -32,7 +32,7 @@ func TestRotateEndpoint(t *testing.T) {
 	go func() {
 		errc <- record.Write(context.Background(), record.Options{Dir: t.TempDir(), RotateEvery: time.Hour, Rotate: rot.Chan()}, in)
 	}()
-	srv := httptest.NewServer(adminMux(rot, nil))
+	srv := httptest.NewServer(adminMux(rot, nil, nil))
 	defer srv.Close()
 
 	post := func() (int, string) {
@@ -66,7 +66,7 @@ func TestRotateEndpoint(t *testing.T) {
 }
 
 func TestRotateEndpointWithoutRecording(t *testing.T) {
-	srv := httptest.NewServer(adminMux(nil, nil))
+	srv := httptest.NewServer(adminMux(nil, nil, nil))
 	defer srv.Close()
 	resp, err := http.Post(srv.URL+"/admin/rotate", "", nil)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestOneListenerServesGRPCAndHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &curtilagev1.Config{Listen: lis.Addr().String(), DisplayName: "house"}
-	srv, gs := httpServer(cfg, store.New(time.Hour), nil)
+	srv, gs := httpServer(cfg, store.New(time.Hour), nil, nil, nil)
 	go srv.Serve(lis)
 	t.Cleanup(func() { shutdown(srv, gs) })
 
