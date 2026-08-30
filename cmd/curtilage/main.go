@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"syscall"
 	"time"
@@ -33,7 +34,8 @@ func usage() {
 	fmt.Fprint(os.Stderr, `usage: curtilage <command> [flags]
 
   run     -config F          watch the broker; record when configured
-  replay  -file F.mcap       summarize a recording
+  replay  -file F.mcap       summarize a recording (-topic, -dump N)
+  trim    -file F -out G     cut a recording down (-from, -to, -keep, -drop)
   version                    print the version
 `)
 }
@@ -50,6 +52,8 @@ func main() {
 		err = cmdRun(os.Args[2:])
 	case "replay":
 		err = cmdReplay(os.Args[2:])
+	case "trim":
+		err = cmdTrim(os.Args[2:])
 	case "version", "-version", "--version":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -180,6 +184,8 @@ func adminMux(rotator *record.Rotator) *http.ServeMux {
 func cmdReplay(args []string) error {
 	fs := flag.NewFlagSet("replay", flag.ContinueOnError)
 	file := fs.String("file", "", "MCAP recording to summarize")
+	topic := fs.String("topic", "", "only records on this topic (exact match)")
+	dump := fs.Int("dump", 0, "print the first N matching records' payloads")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -193,6 +199,21 @@ func cmdReplay(args []string) error {
 			return err
 		}
 		fmt.Printf("WARNING: %v\n", err) // torn tail or bad checksums; what follows is what survived
+	}
+	if *topic != "" {
+		kept := recs[:0]
+		for _, r := range recs {
+			if r.GetTopic() == *topic {
+				kept = append(kept, r)
+			}
+		}
+		recs = kept
+	}
+	for i, r := range recs {
+		if i >= *dump {
+			break
+		}
+		fmt.Printf("--- %s %s (%d bytes)\n%s\n", r.GetReceivedAt().AsTime().UTC().Format(time.RFC3339Nano), r.GetTopic(), len(r.GetPayload()), r.GetPayload())
 	}
 	if len(recs) == 0 {
 		fmt.Println("no records")
@@ -215,5 +236,70 @@ func cmdReplay(args []string) error {
 	for _, t := range topics {
 		fmt.Printf("%8d  %s\n", byTopic[t], t)
 	}
+	return nil
+}
+
+// cmdTrim cuts a recording down to a window and a set of topics: the
+// way a day of driveway traffic becomes a checked-in fixture.
+func cmdTrim(args []string) error {
+	fs := flag.NewFlagSet("trim", flag.ContinueOnError)
+	file := fs.String("file", "", "MCAP recording to read")
+	out := fs.String("out", "", "MCAP file to write")
+	from := fs.String("from", "", "keep records received at or after this time (RFC 3339)")
+	to := fs.String("to", "", "keep records received before this time (RFC 3339)")
+	keep := fs.String("keep", "", "keep only topics matching this regexp (Go syntax)")
+	drop := fs.String("drop", "", "drop topics matching this regexp, after -keep")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" || *out == "" {
+		fs.Usage()
+		return fmt.Errorf("-file and -out are required")
+	}
+	var fromT, toT time.Time
+	var err error
+	if *from != "" {
+		if fromT, err = time.Parse(time.RFC3339, *from); err != nil {
+			return fmt.Errorf("-from: %w", err)
+		}
+	}
+	if *to != "" {
+		if toT, err = time.Parse(time.RFC3339, *to); err != nil {
+			return fmt.Errorf("-to: %w", err)
+		}
+	}
+	var keepRE, dropRE *regexp.Regexp
+	if *keep != "" {
+		if keepRE, err = regexp.Compile(*keep); err != nil {
+			return fmt.Errorf("-keep: %w", err)
+		}
+	}
+	if *drop != "" {
+		if dropRE, err = regexp.Compile(*drop); err != nil {
+			return fmt.Errorf("-drop: %w", err)
+		}
+	}
+	recs, err := record.ReadAll(context.Background(), *file)
+	if err != nil && !errors.Is(err, record.ErrTruncated) && !errors.Is(err, record.ErrCorrupt) {
+		return err
+	}
+	var kept []*record.Record
+	for _, r := range recs {
+		t := r.GetReceivedAt().AsTime()
+		if (!fromT.IsZero() && t.Before(fromT)) || (!toT.IsZero() && !t.Before(toT)) {
+			continue
+		}
+		if keepRE != nil && !keepRE.MatchString(r.GetTopic()) {
+			continue
+		}
+		if dropRE != nil && dropRE.MatchString(r.GetTopic()) {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	if err := record.WriteFile(*out, kept); err != nil {
+		return err
+	}
+	fmt.Printf("%d of %d records -> %s\n", len(kept), len(recs), *out)
 	return nil
 }

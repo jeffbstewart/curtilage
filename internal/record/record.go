@@ -232,6 +232,34 @@ func open(dir string, now time.Time) (*file, error) {
 			return nil, err
 		}
 	}
+	return newFile(osf, path, now)
+}
+
+// WriteFile writes recs, in order, to one complete MCAP at path
+// (created or truncated).  For derived recordings -- a trimmed
+// fixture, a filtered extract -- not the live recorder, which rotates.
+func WriteFile(path string, recs []*Record) error {
+	osf, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	f, err := newFile(osf, path, time.Now())
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		rec.PayloadCrc32C = Checksum(rec.GetPayload())
+		if err := f.write(rec); err != nil {
+			f.close()
+			return err
+		}
+	}
+	return f.close()
+}
+
+// newFile wraps an open, empty osf as an MCAP: header and schema
+// written, no channels yet.  Closes osf on failure.
+func newFile(osf *os.File, path string, now time.Time) (*file, error) {
 	w, err := mcap.NewWriter(osf, &mcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   chunkSize,
