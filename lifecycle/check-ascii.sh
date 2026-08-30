@@ -3,9 +3,11 @@
 # only control characters allowed; everything else must be printable
 # space..tilde.  Run from the repository root.  (From homenet; the
 # design record says ASCII everywhere, and this is what enforces it.)
+# testdata/ directories are exempt: they hold recorded fixtures
+# (binary MCAP), which are data, not text.
 set -eu
 TAB=$(printf '\t')
-if git ls-files -z | LC_ALL=C xargs -0 grep -n "[^${TAB} -~]" --; then
+if git ls-files -z -- . ':!:**/testdata/**' | LC_ALL=C xargs -0 grep -n "[^${TAB} -~]" --; then
   echo "check-ascii: non-ASCII or control bytes found (listed above)" >&2
   exit 1
 fi

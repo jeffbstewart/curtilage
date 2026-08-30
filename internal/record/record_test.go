@@ -182,6 +182,36 @@ func TestCancelStillClosesFile(t *testing.T) {
 	}
 }
 
+func TestWriteFileRoundTrip(t *testing.T) {
+	want := sample(30, time.Date(2026, 8, 30, 11, 0, 0, 0, time.UTC))
+	for _, r := range want {
+		r.PayloadCrc32C = 0 // WriteFile stamps it
+	}
+	p := filepath.Join(t.TempDir(), "trimmed.mcap")
+	if err := WriteFile(p, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadAll(context.Background(), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d records, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if !proto.Equal(got[i], want[i]) {
+			t.Errorf("record %d differs:\n got %v\nwant %v", i, got[i], want[i])
+		}
+	}
+	// Overwrites rather than appends.
+	if err := WriteFile(p, want[:3]); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := ReadAll(context.Background(), p); len(got) != 3 {
+		t.Errorf("after rewrite: %d records, want 3", len(got))
+	}
+}
+
 func TestFileName(t *testing.T) {
 	got := FileName(time.Date(2026, 8, 29, 22, 5, 9, 0, time.FixedZone("x", -4*3600)))
 	if got != "curtilage-20260830T020509Z.mcap" {
