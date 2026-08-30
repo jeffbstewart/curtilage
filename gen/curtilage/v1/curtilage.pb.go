@@ -8,7 +8,7 @@
 // engine can change how it decides without the app changing how it
 // shows.  Media (the snapshot now; clips later) streams by event id.
 //
-// Enrolment, preservation and feedback are not here yet; they arrive
+// Enrollment, preservation and feedback are not here yet; they arrive
 // with their phases rather than as placeholders.
 //
 // Enum convention: every enum's zero value is <NAME>_UNKNOWN and is
@@ -39,6 +39,54 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// What the client is, so the server can refuse one it no longer
+// speaks to.
+type Platform int32
+
+const (
+	Platform_PLATFORM_UNKNOWN Platform = 0
+	Platform_PLATFORM_IOS     Platform = 1
+)
+
+// Enum value maps for Platform.
+var (
+	Platform_name = map[int32]string{
+		0: "PLATFORM_UNKNOWN",
+		1: "PLATFORM_IOS",
+	}
+	Platform_value = map[string]int32{
+		"PLATFORM_UNKNOWN": 0,
+		"PLATFORM_IOS":     1,
+	}
+)
+
+func (x Platform) Enum() *Platform {
+	p := new(Platform)
+	*p = x
+	return p
+}
+
+func (x Platform) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Platform) Descriptor() protoreflect.EnumDescriptor {
+	return file_curtilage_v1_curtilage_proto_enumTypes[0].Descriptor()
+}
+
+func (Platform) Type() protoreflect.EnumType {
+	return &file_curtilage_v1_curtilage_proto_enumTypes[0]
+}
+
+func (x Platform) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Platform.Descriptor instead.
+func (Platform) EnumDescriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{0}
+}
 
 // What the policy engine decided an event is.
 type EventKind int32
@@ -86,11 +134,11 @@ func (x EventKind) String() string {
 }
 
 func (EventKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_curtilage_v1_curtilage_proto_enumTypes[0].Descriptor()
+	return file_curtilage_v1_curtilage_proto_enumTypes[1].Descriptor()
 }
 
 func (EventKind) Type() protoreflect.EnumType {
-	return &file_curtilage_v1_curtilage_proto_enumTypes[0]
+	return &file_curtilage_v1_curtilage_proto_enumTypes[1]
 }
 
 func (x EventKind) Number() protoreflect.EnumNumber {
@@ -99,7 +147,7 @@ func (x EventKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EventKind.Descriptor instead.
 func (EventKind) EnumDescriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{0}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{1}
 }
 
 // Whether there is a clip to play, and whether it is still growing.
@@ -142,11 +190,11 @@ func (x ClipState) String() string {
 }
 
 func (ClipState) Descriptor() protoreflect.EnumDescriptor {
-	return file_curtilage_v1_curtilage_proto_enumTypes[1].Descriptor()
+	return file_curtilage_v1_curtilage_proto_enumTypes[2].Descriptor()
 }
 
 func (ClipState) Type() protoreflect.EnumType {
-	return &file_curtilage_v1_curtilage_proto_enumTypes[1]
+	return &file_curtilage_v1_curtilage_proto_enumTypes[2]
 }
 
 func (x ClipState) Number() protoreflect.EnumNumber {
@@ -155,7 +203,7 @@ func (x ClipState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ClipState.Descriptor instead.
 func (ClipState) EnumDescriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{1}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{2}
 }
 
 // How an event changed.
@@ -200,11 +248,11 @@ func (x EventChange) String() string {
 }
 
 func (EventChange) Descriptor() protoreflect.EnumDescriptor {
-	return file_curtilage_v1_curtilage_proto_enumTypes[2].Descriptor()
+	return file_curtilage_v1_curtilage_proto_enumTypes[3].Descriptor()
 }
 
 func (EventChange) Type() protoreflect.EnumType {
-	return &file_curtilage_v1_curtilage_proto_enumTypes[2]
+	return &file_curtilage_v1_curtilage_proto_enumTypes[3]
 }
 
 func (x EventChange) Number() protoreflect.EnumNumber {
@@ -213,7 +261,7 @@ func (x EventChange) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EventChange.Descriptor instead.
 func (EventChange) EnumDescriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{2}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{3}
 }
 
 // Which media of an event is wanted.
@@ -248,11 +296,11 @@ func (x Media) String() string {
 }
 
 func (Media) Descriptor() protoreflect.EnumDescriptor {
-	return file_curtilage_v1_curtilage_proto_enumTypes[3].Descriptor()
+	return file_curtilage_v1_curtilage_proto_enumTypes[4].Descriptor()
 }
 
 func (Media) Type() protoreflect.EnumType {
-	return &file_curtilage_v1_curtilage_proto_enumTypes[3]
+	return &file_curtilage_v1_curtilage_proto_enumTypes[4]
 }
 
 func (x Media) Number() protoreflect.EnumNumber {
@@ -261,11 +309,17 @@ func (x Media) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Media.Descriptor instead.
 func (Media) EnumDescriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{3}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{4}
 }
 
 type GetServerInfoRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The API version this client was built against.  1 for now.
+	ApiVersion uint32   `protobuf:"varint,1,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Platform   Platform `protobuf:"varint,2,opt,name=platform,proto3,enum=curtilage.v1.Platform" json:"platform,omitempty"`
+	// Free-form build identifier for logs and support ("1.0 (42)",
+	// a git sha); the server never parses it.
+	Build         string `protobuf:"bytes,3,opt,name=build,proto3" json:"build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -300,19 +354,39 @@ func (*GetServerInfoRequest) Descriptor() ([]byte, []int) {
 	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *GetServerInfoRequest) GetApiVersion() uint32 {
+	if x != nil {
+		return x.ApiVersion
+	}
+	return 0
+}
+
+func (x *GetServerInfoRequest) GetPlatform() Platform {
+	if x != nil {
+		return x.Platform
+	}
+	return Platform_PLATFORM_UNKNOWN
+}
+
+func (x *GetServerInfoRequest) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
 type GetServerInfoResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Server version, e.g. "0.1.0".
 	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	// Lowest app API version this server still speaks.
+	// Lowest client API version this server still speaks.
 	MinApiVersion uint32 `protobuf:"varint,2,opt,name=min_api_version,json=minApiVersion,proto3" json:"min_api_version,omitempty"`
 	// The API version this server implements.
 	ApiVersion uint32 `protobuf:"varint,3,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
 	// Human-readable name of this installation (never a hostname the
-	// app should connect to; that comes from enrolment).
+	// app should connect to; that comes from enrollment).
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	// How far back events and their media are kept.  Older than this is
-	// gone: there is no archive to subpoena.
+	// How far back events and their media are kept.
 	Retention     *durationpb.Duration `protobuf:"bytes,5,opt,name=retention,proto3" json:"retention,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -383,13 +457,149 @@ func (x *GetServerInfoResponse) GetRetention() *durationpb.Duration {
 	return nil
 }
 
+type ListCamerasRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCamerasRequest) Reset() {
+	*x = ListCamerasRequest{}
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCamerasRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCamerasRequest) ProtoMessage() {}
+
+func (x *ListCamerasRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCamerasRequest.ProtoReflect.Descriptor instead.
+func (*ListCamerasRequest) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{2}
+}
+
+type Camera struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name the household configured, as it appears in Event.camera
+	// and in ListEventsRequest.cameras: "porch-east".
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// What to show a person, if the household set one; else empty and
+	// the app shows name.
+	DisplayName   string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Camera) Reset() {
+	*x = Camera{}
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Camera) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Camera) ProtoMessage() {}
+
+func (x *Camera) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Camera.ProtoReflect.Descriptor instead.
+func (*Camera) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Camera) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Camera) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+type ListCamerasResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cameras       []*Camera              `protobuf:"bytes,1,rep,name=cameras,proto3" json:"cameras,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCamerasResponse) Reset() {
+	*x = ListCamerasResponse{}
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCamerasResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCamerasResponse) ProtoMessage() {}
+
+func (x *ListCamerasResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCamerasResponse.ProtoReflect.Descriptor instead.
+func (*ListCamerasResponse) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListCamerasResponse) GetCameras() []*Camera {
+	if x != nil {
+		return x.Cameras
+	}
+	return nil
+}
+
 // One thing that happened in the curtilage.
 type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Opaque, server-minted, stable for the event's lifetime.  Never
 	// guessable: media is fetched by this id.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Camera name as the household configured it, e.g. "porch-east".
+	// Camera name as the household configured it (Camera.name).
 	Camera string `protobuf:"bytes,2,opt,name=camera,proto3" json:"camera,omitempty"`
 	// Object label from perception: "car", "person", "package", ...
 	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
@@ -404,16 +614,15 @@ type Event struct {
 	// A snapshot can be fetched (GetMedia with MEDIA_SNAPSHOT).
 	HasSnapshot bool      `protobuf:"varint,9,opt,name=has_snapshot,json=hasSnapshot,proto3" json:"has_snapshot,omitempty"`
 	Clip        ClipState `protobuf:"varint,10,opt,name=clip,proto3,enum=curtilage.v1.ClipState" json:"clip,omitempty"`
-	// The perception layer's own id for the underlying object (a
-	// Frigate event id).  For tuning and debugging, not for display.
-	SourceId      string `protobuf:"bytes,11,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	// See EventDebug.  Nothing in the app depends on it.
+	Debug         *EventDebug `protobuf:"bytes,11,opt,name=debug,proto3" json:"debug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[2]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -425,7 +634,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[2]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -438,7 +647,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{2}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Event) GetId() string {
@@ -511,7 +720,57 @@ func (x *Event) GetClip() ClipState {
 	return ClipState_CLIP_STATE_UNKNOWN
 }
 
-func (x *Event) GetSourceId() string {
+func (x *Event) GetDebug() *EventDebug {
+	if x != nil {
+		return x.Debug
+	}
+	return nil
+}
+
+// Where an Event came from, for logs and human eyes only.  This
+// message is OUTSIDE the compatibility promise: fields may be added,
+// renamed, or removed at any time without an API version change.  A
+// client must not branch on anything in it.
+type EventDebug struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The perception layer's own id for the underlying object (a
+	// Frigate event id).
+	SourceId      string `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventDebug) Reset() {
+	*x = EventDebug{}
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventDebug) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventDebug) ProtoMessage() {}
+
+func (x *EventDebug) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventDebug.ProtoReflect.Descriptor instead.
+func (*EventDebug) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *EventDebug) GetSourceId() string {
 	if x != nil {
 		return x.SourceId
 	}
@@ -520,24 +779,20 @@ func (x *Event) GetSourceId() string {
 
 type ListEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Events that started at or after this time.  Unset: as far back as
-	// retention goes.
-	Since *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3" json:"since,omitempty"`
-	// Events that started before this time.  Unset: now.
-	Until *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=until,proto3" json:"until,omitempty"`
-	// Only these cameras; empty means all.
-	Cameras []string `protobuf:"bytes,3,rep,name=cameras,proto3" json:"cameras,omitempty"`
+	// Only these cameras (Camera.name); empty means all.
+	Cameras []string `protobuf:"bytes,1,rep,name=cameras,proto3" json:"cameras,omitempty"`
 	// Page size; the server caps it.  Zero means the server's default.
-	PageSize uint32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// From a previous response; empty for the first page.
-	PageToken     string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PageSize uint32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// From the previous response, to get the next (older) page.  Empty
+	// starts from the newest event.
+	ContinuationToken string `protobuf:"bytes,3,opt,name=continuation_token,json=continuationToken,proto3" json:"continuation_token,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[3]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +804,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[3]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,21 +817,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ListEventsRequest) GetSince() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Since
-	}
-	return nil
-}
-
-func (x *ListEventsRequest) GetUntil() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Until
-	}
-	return nil
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListEventsRequest) GetCameras() []string {
@@ -593,26 +834,28 @@ func (x *ListEventsRequest) GetPageSize() uint32 {
 	return 0
 }
 
-func (x *ListEventsRequest) GetPageToken() string {
+func (x *ListEventsRequest) GetContinuationToken() string {
 	if x != nil {
-		return x.PageToken
+		return x.ContinuationToken
 	}
 	return ""
 }
 
 type ListEventsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Newest first.
+	// Newest first.  Empty means the previous page was the last: the
+	// edge of retention has been reached and there is nothing older.
 	Events []*Event `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	// Empty when this was the last page.
-	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Always set when events is non-empty.  Send it back to get the
+	// page older than these.  Opaque; do not store it across sessions.
+	ContinuationToken string `protobuf:"bytes,2,opt,name=continuation_token,json=continuationToken,proto3" json:"continuation_token,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +867,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +880,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{4}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListEventsResponse) GetEvents() []*Event {
@@ -647,9 +890,9 @@ func (x *ListEventsResponse) GetEvents() []*Event {
 	return nil
 }
 
-func (x *ListEventsResponse) GetNextPageToken() string {
+func (x *ListEventsResponse) GetContinuationToken() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.ContinuationToken
 	}
 	return ""
 }
@@ -659,7 +902,7 @@ type WatchEventsRequest struct {
 	// Replay changes since this time before following live ones, so a
 	// reconnecting client catches up.  Unset: live only.
 	Since *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3" json:"since,omitempty"`
-	// Only these cameras; empty means all.
+	// Only these cameras (Camera.name); empty means all.
 	Cameras       []string `protobuf:"bytes,2,rep,name=cameras,proto3" json:"cameras,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -667,7 +910,7 @@ type WatchEventsRequest struct {
 
 func (x *WatchEventsRequest) Reset() {
 	*x = WatchEventsRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +922,7 @@ func (x *WatchEventsRequest) String() string {
 func (*WatchEventsRequest) ProtoMessage() {}
 
 func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +935,7 @@ func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
 func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{5}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WatchEventsRequest) GetSince() *timestamppb.Timestamp {
@@ -720,7 +963,7 @@ type WatchEventsResponse struct {
 
 func (x *WatchEventsResponse) Reset() {
 	*x = WatchEventsResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[6]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -732,7 +975,7 @@ func (x *WatchEventsResponse) String() string {
 func (*WatchEventsResponse) ProtoMessage() {}
 
 func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[6]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -745,7 +988,7 @@ func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsResponse.ProtoReflect.Descriptor instead.
 func (*WatchEventsResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{6}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WatchEventsResponse) GetChange() EventChange {
@@ -772,7 +1015,7 @@ type GetMediaRequest struct {
 
 func (x *GetMediaRequest) Reset() {
 	*x = GetMediaRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +1027,7 @@ func (x *GetMediaRequest) String() string {
 func (*GetMediaRequest) ProtoMessage() {}
 
 func (x *GetMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +1040,7 @@ func (x *GetMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaRequest.ProtoReflect.Descriptor instead.
 func (*GetMediaRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{7}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetMediaRequest) GetEventId() string {
@@ -814,7 +1057,11 @@ func (x *GetMediaRequest) GetMedia() Media {
 	return Media_MEDIA_UNKNOWN
 }
 
-// First message: info.  Every message after it: chunk.
+// One message of the GetMedia stream.  Each message carries exactly
+// one of the two: the stream's FIRST message is always info and only
+// the first is; every message after it is a chunk, in order, and the
+// stream ends after the last chunk.  A client concatenates the chunks
+// and has the media described by info.
 type GetMediaResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -828,7 +1075,7 @@ type GetMediaResponse struct {
 
 func (x *GetMediaResponse) Reset() {
 	*x = GetMediaResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +1087,7 @@ func (x *GetMediaResponse) String() string {
 func (*GetMediaResponse) ProtoMessage() {}
 
 func (x *GetMediaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +1100,7 @@ func (x *GetMediaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaResponse.ProtoReflect.Descriptor instead.
 func (*GetMediaResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{8}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetMediaResponse) GetPayload() isGetMediaResponse_Payload {
@@ -910,7 +1157,7 @@ type MediaInfo struct {
 
 func (x *MediaInfo) Reset() {
 	*x = MediaInfo{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +1169,7 @@ func (x *MediaInfo) String() string {
 func (*MediaInfo) ProtoMessage() {}
 
 func (x *MediaInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +1182,7 @@ func (x *MediaInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaInfo.ProtoReflect.Descriptor instead.
 func (*MediaInfo) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{9}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MediaInfo) GetContentType() string {
@@ -956,15 +1203,25 @@ var File_curtilage_v1_curtilage_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\n" +
-	"\x1ccurtilage/v1/curtilage.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x16\n" +
-	"\x14GetServerInfoRequest\"\xd6\x01\n" +
+	"\x1ccurtilage/v1/curtilage.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x81\x01\n" +
+	"\x14GetServerInfoRequest\x12\x1f\n" +
+	"\vapi_version\x18\x01 \x01(\rR\n" +
+	"apiVersion\x122\n" +
+	"\bplatform\x18\x02 \x01(\x0e2\x16.curtilage.v1.PlatformR\bplatform\x12\x14\n" +
+	"\x05build\x18\x03 \x01(\tR\x05build\"\xd6\x01\n" +
 	"\x15GetServerInfoResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12&\n" +
 	"\x0fmin_api_version\x18\x02 \x01(\rR\rminApiVersion\x12\x1f\n" +
 	"\vapi_version\x18\x03 \x01(\rR\n" +
 	"apiVersion\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x127\n" +
-	"\tretention\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\tretention\"\x84\x03\n" +
+	"\tretention\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\tretention\"\x14\n" +
+	"\x12ListCamerasRequest\"?\n" +
+	"\x06Camera\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\"E\n" +
+	"\x13ListCamerasResponse\x12.\n" +
+	"\acameras\x18\x01 \x03(\v2\x14.curtilage.v1.CameraR\acameras\"\x97\x03\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06camera\x18\x02 \x01(\tR\x06camera\x12\x14\n" +
@@ -977,18 +1234,18 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\bended_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12!\n" +
 	"\fhas_snapshot\x18\t \x01(\bR\vhasSnapshot\x12+\n" +
 	"\x04clip\x18\n" +
-	" \x01(\x0e2\x17.curtilage.v1.ClipStateR\x04clip\x12\x1b\n" +
-	"\tsource_id\x18\v \x01(\tR\bsourceId\"\xcd\x01\n" +
-	"\x11ListEventsRequest\x120\n" +
-	"\x05since\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x120\n" +
-	"\x05until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12\x18\n" +
-	"\acameras\x18\x03 \x03(\tR\acameras\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\rR\bpageSize\x12\x1d\n" +
+	" \x01(\x0e2\x17.curtilage.v1.ClipStateR\x04clip\x12.\n" +
+	"\x05debug\x18\v \x01(\v2\x18.curtilage.v1.EventDebugR\x05debug\")\n" +
 	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\"i\n" +
+	"EventDebug\x12\x1b\n" +
+	"\tsource_id\x18\x01 \x01(\tR\bsourceId\"y\n" +
+	"\x11ListEventsRequest\x12\x18\n" +
+	"\acameras\x18\x01 \x03(\tR\acameras\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12-\n" +
+	"\x12continuation_token\x18\x03 \x01(\tR\x11continuationToken\"p\n" +
 	"\x12ListEventsResponse\x12+\n" +
-	"\x06events\x18\x01 \x03(\v2\x13.curtilage.v1.EventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"`\n" +
+	"\x06events\x18\x01 \x03(\v2\x13.curtilage.v1.EventR\x06events\x12-\n" +
+	"\x12continuation_token\x18\x02 \x01(\tR\x11continuationToken\"`\n" +
 	"\x12WatchEventsRequest\x120\n" +
 	"\x05since\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x18\n" +
 	"\acameras\x18\x02 \x03(\tR\acameras\"s\n" +
@@ -1004,7 +1261,10 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\apayload\"B\n" +
 	"\tMediaInfo\x12!\n" +
 	"\fcontent_type\x18\x01 \x01(\tR\vcontentType\x12\x12\n" +
-	"\x04size\x18\x02 \x01(\x04R\x04size*\x87\x01\n" +
+	"\x04size\x18\x02 \x01(\x04R\x04size*2\n" +
+	"\bPlatform\x12\x14\n" +
+	"\x10PLATFORM_UNKNOWN\x10\x00\x12\x10\n" +
+	"\fPLATFORM_IOS\x10\x01*\x87\x01\n" +
 	"\tEventKind\x12\x16\n" +
 	"\x12EVENT_KIND_UNKNOWN\x10\x00\x12\x16\n" +
 	"\x12EVENT_KIND_ARRIVAL\x10\x01\x12\x18\n" +
@@ -1023,9 +1283,10 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x12EVENT_CHANGE_ENDED\x10\x03*.\n" +
 	"\x05Media\x12\x11\n" +
 	"\rMEDIA_UNKNOWN\x10\x00\x12\x12\n" +
-	"\x0eMEDIA_SNAPSHOT\x10\x012\xe0\x02\n" +
+	"\x0eMEDIA_SNAPSHOT\x10\x012\xb4\x03\n" +
 	"\x10CurtilageService\x12X\n" +
-	"\rGetServerInfo\x12\".curtilage.v1.GetServerInfoRequest\x1a#.curtilage.v1.GetServerInfoResponse\x12O\n" +
+	"\rGetServerInfo\x12\".curtilage.v1.GetServerInfoRequest\x1a#.curtilage.v1.GetServerInfoResponse\x12R\n" +
+	"\vListCameras\x12 .curtilage.v1.ListCamerasRequest\x1a!.curtilage.v1.ListCamerasResponse\x12O\n" +
 	"\n" +
 	"ListEvents\x12\x1f.curtilage.v1.ListEventsRequest\x1a .curtilage.v1.ListEventsResponse\x12T\n" +
 	"\vWatchEvents\x12 .curtilage.v1.WatchEventsRequest\x1a!.curtilage.v1.WatchEventsResponse0\x01\x12K\n" +
@@ -1044,53 +1305,61 @@ func file_curtilage_v1_curtilage_proto_rawDescGZIP() []byte {
 	return file_curtilage_v1_curtilage_proto_rawDescData
 }
 
-var file_curtilage_v1_curtilage_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_curtilage_v1_curtilage_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_curtilage_v1_curtilage_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_curtilage_v1_curtilage_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_curtilage_v1_curtilage_proto_goTypes = []any{
-	(EventKind)(0),                // 0: curtilage.v1.EventKind
-	(ClipState)(0),                // 1: curtilage.v1.ClipState
-	(EventChange)(0),              // 2: curtilage.v1.EventChange
-	(Media)(0),                    // 3: curtilage.v1.Media
-	(*GetServerInfoRequest)(nil),  // 4: curtilage.v1.GetServerInfoRequest
-	(*GetServerInfoResponse)(nil), // 5: curtilage.v1.GetServerInfoResponse
-	(*Event)(nil),                 // 6: curtilage.v1.Event
-	(*ListEventsRequest)(nil),     // 7: curtilage.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),    // 8: curtilage.v1.ListEventsResponse
-	(*WatchEventsRequest)(nil),    // 9: curtilage.v1.WatchEventsRequest
-	(*WatchEventsResponse)(nil),   // 10: curtilage.v1.WatchEventsResponse
-	(*GetMediaRequest)(nil),       // 11: curtilage.v1.GetMediaRequest
-	(*GetMediaResponse)(nil),      // 12: curtilage.v1.GetMediaResponse
-	(*MediaInfo)(nil),             // 13: curtilage.v1.MediaInfo
-	(*durationpb.Duration)(nil),   // 14: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(Platform)(0),                 // 0: curtilage.v1.Platform
+	(EventKind)(0),                // 1: curtilage.v1.EventKind
+	(ClipState)(0),                // 2: curtilage.v1.ClipState
+	(EventChange)(0),              // 3: curtilage.v1.EventChange
+	(Media)(0),                    // 4: curtilage.v1.Media
+	(*GetServerInfoRequest)(nil),  // 5: curtilage.v1.GetServerInfoRequest
+	(*GetServerInfoResponse)(nil), // 6: curtilage.v1.GetServerInfoResponse
+	(*ListCamerasRequest)(nil),    // 7: curtilage.v1.ListCamerasRequest
+	(*Camera)(nil),                // 8: curtilage.v1.Camera
+	(*ListCamerasResponse)(nil),   // 9: curtilage.v1.ListCamerasResponse
+	(*Event)(nil),                 // 10: curtilage.v1.Event
+	(*EventDebug)(nil),            // 11: curtilage.v1.EventDebug
+	(*ListEventsRequest)(nil),     // 12: curtilage.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),    // 13: curtilage.v1.ListEventsResponse
+	(*WatchEventsRequest)(nil),    // 14: curtilage.v1.WatchEventsRequest
+	(*WatchEventsResponse)(nil),   // 15: curtilage.v1.WatchEventsResponse
+	(*GetMediaRequest)(nil),       // 16: curtilage.v1.GetMediaRequest
+	(*GetMediaResponse)(nil),      // 17: curtilage.v1.GetMediaResponse
+	(*MediaInfo)(nil),             // 18: curtilage.v1.MediaInfo
+	(*durationpb.Duration)(nil),   // 19: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
 }
 var file_curtilage_v1_curtilage_proto_depIdxs = []int32{
-	14, // 0: curtilage.v1.GetServerInfoResponse.retention:type_name -> google.protobuf.Duration
-	0,  // 1: curtilage.v1.Event.kind:type_name -> curtilage.v1.EventKind
-	15, // 2: curtilage.v1.Event.started_at:type_name -> google.protobuf.Timestamp
-	15, // 3: curtilage.v1.Event.ended_at:type_name -> google.protobuf.Timestamp
-	1,  // 4: curtilage.v1.Event.clip:type_name -> curtilage.v1.ClipState
-	15, // 5: curtilage.v1.ListEventsRequest.since:type_name -> google.protobuf.Timestamp
-	15, // 6: curtilage.v1.ListEventsRequest.until:type_name -> google.protobuf.Timestamp
-	6,  // 7: curtilage.v1.ListEventsResponse.events:type_name -> curtilage.v1.Event
-	15, // 8: curtilage.v1.WatchEventsRequest.since:type_name -> google.protobuf.Timestamp
-	2,  // 9: curtilage.v1.WatchEventsResponse.change:type_name -> curtilage.v1.EventChange
-	6,  // 10: curtilage.v1.WatchEventsResponse.event:type_name -> curtilage.v1.Event
-	3,  // 11: curtilage.v1.GetMediaRequest.media:type_name -> curtilage.v1.Media
-	13, // 12: curtilage.v1.GetMediaResponse.info:type_name -> curtilage.v1.MediaInfo
-	4,  // 13: curtilage.v1.CurtilageService.GetServerInfo:input_type -> curtilage.v1.GetServerInfoRequest
-	7,  // 14: curtilage.v1.CurtilageService.ListEvents:input_type -> curtilage.v1.ListEventsRequest
-	9,  // 15: curtilage.v1.CurtilageService.WatchEvents:input_type -> curtilage.v1.WatchEventsRequest
-	11, // 16: curtilage.v1.CurtilageService.GetMedia:input_type -> curtilage.v1.GetMediaRequest
-	5,  // 17: curtilage.v1.CurtilageService.GetServerInfo:output_type -> curtilage.v1.GetServerInfoResponse
-	8,  // 18: curtilage.v1.CurtilageService.ListEvents:output_type -> curtilage.v1.ListEventsResponse
-	10, // 19: curtilage.v1.CurtilageService.WatchEvents:output_type -> curtilage.v1.WatchEventsResponse
-	12, // 20: curtilage.v1.CurtilageService.GetMedia:output_type -> curtilage.v1.GetMediaResponse
-	17, // [17:21] is the sub-list for method output_type
-	13, // [13:17] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	0,  // 0: curtilage.v1.GetServerInfoRequest.platform:type_name -> curtilage.v1.Platform
+	19, // 1: curtilage.v1.GetServerInfoResponse.retention:type_name -> google.protobuf.Duration
+	8,  // 2: curtilage.v1.ListCamerasResponse.cameras:type_name -> curtilage.v1.Camera
+	1,  // 3: curtilage.v1.Event.kind:type_name -> curtilage.v1.EventKind
+	20, // 4: curtilage.v1.Event.started_at:type_name -> google.protobuf.Timestamp
+	20, // 5: curtilage.v1.Event.ended_at:type_name -> google.protobuf.Timestamp
+	2,  // 6: curtilage.v1.Event.clip:type_name -> curtilage.v1.ClipState
+	11, // 7: curtilage.v1.Event.debug:type_name -> curtilage.v1.EventDebug
+	10, // 8: curtilage.v1.ListEventsResponse.events:type_name -> curtilage.v1.Event
+	20, // 9: curtilage.v1.WatchEventsRequest.since:type_name -> google.protobuf.Timestamp
+	3,  // 10: curtilage.v1.WatchEventsResponse.change:type_name -> curtilage.v1.EventChange
+	10, // 11: curtilage.v1.WatchEventsResponse.event:type_name -> curtilage.v1.Event
+	4,  // 12: curtilage.v1.GetMediaRequest.media:type_name -> curtilage.v1.Media
+	18, // 13: curtilage.v1.GetMediaResponse.info:type_name -> curtilage.v1.MediaInfo
+	5,  // 14: curtilage.v1.CurtilageService.GetServerInfo:input_type -> curtilage.v1.GetServerInfoRequest
+	7,  // 15: curtilage.v1.CurtilageService.ListCameras:input_type -> curtilage.v1.ListCamerasRequest
+	12, // 16: curtilage.v1.CurtilageService.ListEvents:input_type -> curtilage.v1.ListEventsRequest
+	14, // 17: curtilage.v1.CurtilageService.WatchEvents:input_type -> curtilage.v1.WatchEventsRequest
+	16, // 18: curtilage.v1.CurtilageService.GetMedia:input_type -> curtilage.v1.GetMediaRequest
+	6,  // 19: curtilage.v1.CurtilageService.GetServerInfo:output_type -> curtilage.v1.GetServerInfoResponse
+	9,  // 20: curtilage.v1.CurtilageService.ListCameras:output_type -> curtilage.v1.ListCamerasResponse
+	13, // 21: curtilage.v1.CurtilageService.ListEvents:output_type -> curtilage.v1.ListEventsResponse
+	15, // 22: curtilage.v1.CurtilageService.WatchEvents:output_type -> curtilage.v1.WatchEventsResponse
+	17, // 23: curtilage.v1.CurtilageService.GetMedia:output_type -> curtilage.v1.GetMediaResponse
+	19, // [19:24] is the sub-list for method output_type
+	14, // [14:19] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_curtilage_proto_init() }
@@ -1098,7 +1367,7 @@ func file_curtilage_v1_curtilage_proto_init() {
 	if File_curtilage_v1_curtilage_proto != nil {
 		return
 	}
-	file_curtilage_v1_curtilage_proto_msgTypes[8].OneofWrappers = []any{
+	file_curtilage_v1_curtilage_proto_msgTypes[12].OneofWrappers = []any{
 		(*GetMediaResponse_Info)(nil),
 		(*GetMediaResponse_Chunk)(nil),
 	}
@@ -1107,8 +1376,8 @@ func file_curtilage_v1_curtilage_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_curtilage_v1_curtilage_proto_rawDesc), len(file_curtilage_v1_curtilage_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   10,
+			NumEnums:      5,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

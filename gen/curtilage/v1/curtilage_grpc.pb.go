@@ -8,7 +8,7 @@
 // engine can change how it decides without the app changing how it
 // shows.  Media (the snapshot now; clips later) streams by event id.
 //
-// Enrolment, preservation and feedback are not here yet; they arrive
+// Enrollment, preservation and feedback are not here yet; they arrive
 // with their phases rather than as placeholders.
 //
 // Enum convention: every enum's zero value is <NAME>_UNKNOWN and is
@@ -37,6 +37,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	CurtilageService_GetServerInfo_FullMethodName = "/curtilage.v1.CurtilageService/GetServerInfo"
+	CurtilageService_ListCameras_FullMethodName   = "/curtilage.v1.CurtilageService/ListCameras"
 	CurtilageService_ListEvents_FullMethodName    = "/curtilage.v1.CurtilageService/ListEvents"
 	CurtilageService_WatchEvents_FullMethodName   = "/curtilage.v1.CurtilageService/WatchEvents"
 	CurtilageService_GetMedia_FullMethodName      = "/curtilage.v1.CurtilageService/GetMedia"
@@ -46,17 +47,21 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CurtilageServiceClient interface {
-	// Handshake: version and capabilities, so an app can say "your
-	// server is too old" before it asks for anything else.
+	// Handshake, both ways: the client says what it is, the server says
+	// what it offers, and either side can conclude the other is too old
+	// before anything else is asked.
 	GetServerInfo(ctx context.Context, in *GetServerInfoRequest, opts ...grpc.CallOption) (*GetServerInfoResponse, error)
-	// Events in a time range, newest first, paged.  The range is
-	// bounded by the server's retention (GetServerInfoResponse.retention).
+	// The cameras this installation has, as the household named them.
+	ListCameras(ctx context.Context, in *ListCamerasRequest, opts ...grpc.CallOption) (*ListCamerasResponse, error)
+	// Events newest first, a page at a time, back to the edge of
+	// retention.  New events are not paged for; WatchEvents delivers
+	// them.
 	ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error)
 	// Follow events as they start, change and end.  Optionally replays
 	// recent history first, so a client that reconnects misses nothing.
 	WatchEvents(ctx context.Context, in *WatchEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchEventsResponse], error)
-	// One piece of media for one event, streamed in chunks: the first
-	// message describes it, the rest carry bytes.
+	// One piece of media for one event, streamed: exactly one info
+	// message first, then the bytes in chunks.
 	GetMedia(ctx context.Context, in *GetMediaRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetMediaResponse], error)
 }
 
@@ -72,6 +77,16 @@ func (c *curtilageServiceClient) GetServerInfo(ctx context.Context, in *GetServe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetServerInfoResponse)
 	err := c.cc.Invoke(ctx, CurtilageService_GetServerInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *curtilageServiceClient) ListCameras(ctx context.Context, in *ListCamerasRequest, opts ...grpc.CallOption) (*ListCamerasResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCamerasResponse)
+	err := c.cc.Invoke(ctx, CurtilageService_ListCameras_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,17 +145,21 @@ type CurtilageService_GetMediaClient = grpc.ServerStreamingClient[GetMediaRespon
 // All implementations must embed UnimplementedCurtilageServiceServer
 // for forward compatibility.
 type CurtilageServiceServer interface {
-	// Handshake: version and capabilities, so an app can say "your
-	// server is too old" before it asks for anything else.
+	// Handshake, both ways: the client says what it is, the server says
+	// what it offers, and either side can conclude the other is too old
+	// before anything else is asked.
 	GetServerInfo(context.Context, *GetServerInfoRequest) (*GetServerInfoResponse, error)
-	// Events in a time range, newest first, paged.  The range is
-	// bounded by the server's retention (GetServerInfoResponse.retention).
+	// The cameras this installation has, as the household named them.
+	ListCameras(context.Context, *ListCamerasRequest) (*ListCamerasResponse, error)
+	// Events newest first, a page at a time, back to the edge of
+	// retention.  New events are not paged for; WatchEvents delivers
+	// them.
 	ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error)
 	// Follow events as they start, change and end.  Optionally replays
 	// recent history first, so a client that reconnects misses nothing.
 	WatchEvents(*WatchEventsRequest, grpc.ServerStreamingServer[WatchEventsResponse]) error
-	// One piece of media for one event, streamed in chunks: the first
-	// message describes it, the rest carry bytes.
+	// One piece of media for one event, streamed: exactly one info
+	// message first, then the bytes in chunks.
 	GetMedia(*GetMediaRequest, grpc.ServerStreamingServer[GetMediaResponse]) error
 	mustEmbedUnimplementedCurtilageServiceServer()
 }
@@ -154,6 +173,9 @@ type UnimplementedCurtilageServiceServer struct{}
 
 func (UnimplementedCurtilageServiceServer) GetServerInfo(context.Context, *GetServerInfoRequest) (*GetServerInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetServerInfo not implemented")
+}
+func (UnimplementedCurtilageServiceServer) ListCameras(context.Context, *ListCamerasRequest) (*ListCamerasResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListCameras not implemented")
 }
 func (UnimplementedCurtilageServiceServer) ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListEvents not implemented")
@@ -199,6 +221,24 @@ func _CurtilageService_GetServerInfo_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CurtilageServiceServer).GetServerInfo(ctx, req.(*GetServerInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CurtilageService_ListCameras_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCamerasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CurtilageServiceServer).ListCameras(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CurtilageService_ListCameras_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CurtilageServiceServer).ListCameras(ctx, req.(*ListCamerasRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -253,6 +293,10 @@ var CurtilageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetServerInfo",
 			Handler:    _CurtilageService_GetServerInfo_Handler,
+		},
+		{
+			MethodName: "ListCameras",
+			Handler:    _CurtilageService_ListCameras_Handler,
 		},
 		{
 			MethodName: "ListEvents",
