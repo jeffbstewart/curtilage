@@ -20,6 +20,27 @@ message Config {
   // What the app calls this installation (GetServerInfo);
   // "curtilage" if unset.
   string display_name = 4;
+  // Frigate's HTTP API, for media.  Media is off when unset.
+  Frigate frigate = 5;
+  Links links = 6;
+}
+
+message Frigate {
+  // e.g. "http://frigate.cameras.svc.cluster.local:5000".  Curtilage
+  // is the only thing that talks to it; nothing is passed through.
+  string url = 1;
+}
+
+// Media links are capability tokens (docs/DESIGN.md "Identity").
+// The signing keys are NOT here: CURTILAGE_MEDIA_KEY (current, mints
+// and verifies) and CURTILAGE_MEDIA_KEY_PRIOR (optional; verifies
+// only, during a rotation) in the environment, each `openssl rand
+// -base64 32`.  Every instance behind a load balancer gets the same
+// two.  To rotate: prior <- current, current <- new, roll; drop prior
+// once ttl has passed.
+message Links {
+  // How long a minted link stays valid; 4h if unset.
+  google.protobuf.Duration ttl = 1;
 }
 
 message Mqtt {

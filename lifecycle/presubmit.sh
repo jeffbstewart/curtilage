@@ -13,9 +13,14 @@ if command -v buf >/dev/null 2>&1; then
   (cd proto && buf lint) && echo "buf lint: OK"
   (cd proto && buf format -d --exit-code) && echo "buf format: OK"
   # gen/ is committed; a .proto edit without a regenerate is what CI
-  # rejects, so catch it here first.
+  # rejects, so catch it here first.  Compare the tree before and
+  # after generating (not against the index: an uncommitted but
+  # current gen/ is fine).
+  snap=$(mktemp -d)
+  cp -R gen "$snap/gen"
   (cd proto && buf generate)
-  if ! git diff --quiet -- gen; then echo "gen/ is stale: buf generate ran, commit the result" >&2; exit 1; fi
+  if ! diff -r "$snap/gen" gen >/dev/null; then rm -rf "$snap"; echo "gen/ was stale: buf generate updated it, review and commit the result" >&2; exit 1; fi
+  rm -rf "$snap"
   echo "buf generate: OK (gen/ matches proto/)"
 else
   echo "buf lint/format/generate: SKIPPED (install buf: https://buf.build/docs/installation)"

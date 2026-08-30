@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
+	"github.com/jeffbstewart/curtilage/internal/captoken"
+	"github.com/jeffbstewart/curtilage/internal/frigate"
 	"github.com/jeffbstewart/curtilage/internal/policy"
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
@@ -39,6 +41,11 @@ type Server struct {
 	Version     string
 	DisplayName string
 	Store       *store.Store
+	// Media (media.go).  Frigate nil: no media at all.  Keys nil: no
+	// capability links, GetMedia only.
+	Frigate *frigate.Client
+	Keys    *captoken.Keyring
+	LinkTTL time.Duration
 }
 
 // Register attaches s to gs.

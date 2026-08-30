@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/record"
+	"github.com/jeffbstewart/curtilage/internal/server"
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
@@ -36,6 +37,20 @@ func Handler(version string, st *store.Store) http.Handler {
 			fmt.Fprintf(w, "# HELP curtilage_retention_seconds How long events and recordings are kept.\n# TYPE curtilage_retention_seconds gauge\n")
 			fmt.Fprintf(w, "curtilage_retention_seconds %d\n", int64(st.Retention()/time.Second))
 		}
+		ms := server.Stats()
+		fmt.Fprintf(w, "# HELP curtilage_links_minted_total Capability links minted.\n# TYPE curtilage_links_minted_total counter\n")
+		fmt.Fprintf(w, "curtilage_links_minted_total %d\n", ms.LinksMinted)
+		fmt.Fprintf(w, "# HELP curtilage_links_opened_total Capability links presented with a valid signature.\n# TYPE curtilage_links_opened_total counter\n")
+		fmt.Fprintf(w, "curtilage_links_opened_total %d\n", ms.LinksOpened)
+		fmt.Fprintf(w, "# HELP curtilage_links_rejected_total Capability links refused, by reason.\n# TYPE curtilage_links_rejected_total counter\n")
+		fmt.Fprintf(w, "curtilage_links_rejected_total{reason=\"invalid\"} %d\n", ms.LinksInvalid)
+		fmt.Fprintf(w, "curtilage_links_rejected_total{reason=\"expired\"} %d\n", ms.LinksExpired)
+		fmt.Fprintf(w, "# HELP curtilage_media_fetches_total Media fetched from Frigate.\n# TYPE curtilage_media_fetches_total counter\n")
+		fmt.Fprintf(w, "curtilage_media_fetches_total %d\n", ms.MediaFetches)
+		fmt.Fprintf(w, "# HELP curtilage_media_bytes_total Media bytes served.\n# TYPE curtilage_media_bytes_total counter\n")
+		fmt.Fprintf(w, "curtilage_media_bytes_total %d\n", ms.MediaBytes)
+		fmt.Fprintf(w, "# HELP curtilage_media_failures_total Media Frigate could not supply.\n# TYPE curtilage_media_failures_total counter\n")
+		fmt.Fprintf(w, "curtilage_media_failures_total %d\n", ms.MediaFailures)
 
 		fmt.Fprintf(w, "# HELP curtilage_build_info Build information.\n# TYPE curtilage_build_info gauge\n")
 		fmt.Fprintf(w, "curtilage_build_info{version=%q} 1\n", version)

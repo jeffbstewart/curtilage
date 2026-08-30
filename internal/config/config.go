@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
+	"github.com/jeffbstewart/curtilage/internal/captoken"
 )
 
 // Defaults applied where the file is silent.
@@ -23,6 +24,7 @@ const (
 	DefaultRetention     = 7 * 24 * time.Hour
 	DefaultListen        = ":9118"
 	DefaultDisplayName   = "curtilage"
+	DefaultLinkTTL       = 4 * time.Hour
 )
 
 // Load reads a textproto file, validates it, and fills defaults.
@@ -94,20 +96,44 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = DefaultDisplayName
 	}
+	if cfg.Links == nil {
+		cfg.Links = &curtilagev1.Links{}
+	}
+	if cfg.Links.Ttl == nil {
+		cfg.Links.Ttl = durationpb.New(DefaultLinkTTL)
+	} else if d := cfg.Links.Ttl.AsDuration(); d < time.Minute || d > 7*24*time.Hour {
+		return fmt.Errorf("links.ttl %v out of range (1m..7d)", d)
+	}
 	return nil
 }
 
 // Credentials come from the environment, never the file.
 type Credentials struct {
 	User, Password string
+	// Media link signing keys, decoded (config.proto Media): the
+	// current key, and the prior one during a rotation or nil.
+	MediaKey, MediaKeyPrior []byte
 }
 
-// CredentialsFromEnv reads CURTILAGE_MQTT_USER / CURTILAGE_MQTT_PASSWORD;
-// both empty means an anonymous connection (the broker decides).
+// CredentialsFromEnv reads CURTILAGE_MQTT_USER / CURTILAGE_MQTT_PASSWORD
+// (both empty means an anonymous connection; the broker decides) and
+// CURTILAGE_MEDIA_KEY / CURTILAGE_MEDIA_KEY_PRIOR (base64, 32+ bytes;
+// empty means no media links can be minted).
 func CredentialsFromEnv() (Credentials, error) {
 	u, p := os.Getenv("CURTILAGE_MQTT_USER"), os.Getenv("CURTILAGE_MQTT_PASSWORD")
 	if (u == "") != (p == "") {
 		return Credentials{}, fmt.Errorf("CURTILAGE_MQTT_USER and CURTILAGE_MQTT_PASSWORD must be set together")
 	}
-	return Credentials{User: u, Password: p}, nil
+	c := Credentials{User: u, Password: p}
+	var err error
+	if c.MediaKey, err = captoken.ParseKey(os.Getenv("CURTILAGE_MEDIA_KEY")); err != nil {
+		return Credentials{}, fmt.Errorf("CURTILAGE_MEDIA_KEY: %w", err)
+	}
+	if c.MediaKeyPrior, err = captoken.ParseKey(os.Getenv("CURTILAGE_MEDIA_KEY_PRIOR")); err != nil {
+		return Credentials{}, fmt.Errorf("CURTILAGE_MEDIA_KEY_PRIOR: %w", err)
+	}
+	if c.MediaKey == nil && c.MediaKeyPrior != nil {
+		return Credentials{}, fmt.Errorf("CURTILAGE_MEDIA_KEY_PRIOR is set but CURTILAGE_MEDIA_KEY is not")
+	}
+	return c, nil
 }

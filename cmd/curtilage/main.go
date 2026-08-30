@@ -29,7 +29,9 @@ import (
 	"google.golang.org/grpc"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
+	"github.com/jeffbstewart/curtilage/internal/captoken"
 	"github.com/jeffbstewart/curtilage/internal/config"
+	"github.com/jeffbstewart/curtilage/internal/frigate"
 	"github.com/jeffbstewart/curtilage/internal/metrics"
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/policy"
@@ -110,16 +112,19 @@ func cmdRun(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	creds, err := config.CredentialsFromEnv()
+	if err != nil {
+		return err
+	}
+	fc, kr, err := mediaSetup(cfg, creds)
+	if err != nil {
+		return err
+	}
 	retention := cfg.Recording.GetRetention().AsDuration()
 	st := store.New(retention)
 	eng := policy.NewPassthrough()
 	if *replay != "" {
-		return runReplay(ctx, cfg, st, eng, *replay, *speed)
-	}
-
-	creds, err := config.CredentialsFromEnv()
-	if err != nil {
-		return err
+		return runReplay(ctx, cfg, st, eng, fc, kr, *replay, *speed)
 	}
 
 	// The store is a view of the recordings: rebuild it from them
@@ -165,7 +170,7 @@ func cmdRun(args []string) error {
 		}
 	}()
 
-	srv, gs := httpServer(cfg, st, rotator)
+	srv, gs := httpServer(cfg, st, rotator, fc, kr)
 	go serve(srv, cfg.Listen)
 	go pruneHourly(ctx, st, dir)
 
@@ -196,7 +201,7 @@ func cmdRun(args []string) error {
 // against real traffic with no broker and no house.  Records are fed
 // at their original pace divided by speed, then the server stays up
 // until interrupted.
-func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, eng policy.Engine, path string, speed float64) error {
+func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, eng policy.Engine, fc *frigate.Client, kr *captoken.Keyring, path string, speed float64) error {
 	recs, err := record.ReadAll(ctx, path)
 	if err != nil && !errors.Is(err, record.ErrTruncated) && !errors.Is(err, record.ErrCorrupt) {
 		return err
@@ -204,7 +209,7 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 	if err != nil {
 		log.Printf("replay: %v", err)
 	}
-	srv, gs := httpServer(cfg, st, nil)
+	srv, gs := httpServer(cfg, st, nil, fc, kr)
 	go serve(srv, cfg.Listen)
 	log.Printf("replaying %d records from %s at %gx", len(recs), path, speed)
 	var prev time.Time
@@ -238,10 +243,12 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 // httpServer is the one listener: gRPC (h2c) for the API, plain HTTP
 // for /metrics, /healthz and /admin.  MediaManager's pattern: one
 // port, the reverse proxy in front.
-func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator) (*http.Server, *grpc.Server) {
+func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, fc *frigate.Client, kr *captoken.Keyring) (*http.Server, *grpc.Server) {
 	gs := grpc.NewServer()
-	server.Register(gs, &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st})
-	mux := adminMux(rotator, st)
+	api := &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st,
+		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration()}
+	server.Register(gs, api)
+	mux := adminMux(rotator, st, api)
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)
@@ -250,6 +257,35 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		mux.ServeHTTP(w, r)
 	})
 	return &http.Server{Addr: cfg.Listen, Handler: h2c.NewHandler(root, &http2.Server{})}, gs
+}
+
+// mediaSetup builds the Frigate client and the link keyring from
+// config and environment.  No frigate.url: no media.  No
+// CURTILAGE_MEDIA_KEY: GetMedia works on the LAN, no links are minted.
+func mediaSetup(cfg *curtilagev1.Config, creds config.Credentials) (*frigate.Client, *captoken.Keyring, error) {
+	u := cfg.GetFrigate().GetUrl()
+	if u == "" {
+		log.Print("media: off (no frigate.url)")
+		return nil, nil, nil
+	}
+	fc, err := frigate.NewClient(u)
+	if err != nil {
+		return nil, nil, err
+	}
+	if creds.MediaKey == nil {
+		log.Printf("media: snapshots from %s; no capability links (CURTILAGE_MEDIA_KEY unset)", u)
+		return fc, nil, nil
+	}
+	kr, err := captoken.New(creds.MediaKey, creds.MediaKeyPrior)
+	if err != nil {
+		return nil, nil, err
+	}
+	rot := ""
+	if kr.HasPrior() {
+		rot = ", rotation in progress (prior key accepted)"
+	}
+	log.Printf("media: snapshots from %s; links signed by key %s for %s%s", u, kr.CurrentKeyID(), cfg.GetLinks().GetTtl().AsDuration(), rot)
+	return fc, kr, nil
 }
 
 func serve(srv *http.Server, listen string) {
@@ -296,10 +332,13 @@ func pruneHourly(ctx context.Context, st *store.Store, dir string) {
 // (indexed, with a footer) and readable right now.  Unauthenticated --
 // the listener is LAN only (docs/DESIGN.md).  rotator is nil when
 // recording is off.
-func adminMux(rotator *record.Rotator, st *store.Store) *http.ServeMux {
+func adminMux(rotator *record.Rotator, st *store.Store, api *server.Server) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler(version, st))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
+	if api != nil {
+		mux.Handle("/media/", api.MediaHandler()) // capability links; 404 for everything not signed
+	}
 	mux.HandleFunc("POST /admin/rotate", func(w http.ResponseWriter, r *http.Request) {
 		if rotator == nil {
 			http.Error(w, "recording is not enabled", http.StatusConflict)
