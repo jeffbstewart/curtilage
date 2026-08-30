@@ -124,7 +124,7 @@ func cmdRun(args []string) error {
 	}
 	retention := cfg.Recording.GetRetention().AsDuration()
 	st := store.New(retention)
-	eng := policy.NewPassthrough()
+	eng := policy.NewIncidents(policy.DefaultIncidentConfig()) // people and dogs fold into activities; the rest passes through
 	if *replay != "" {
 		return runReplay(ctx, cfg, st, eng, fc, kr, *replay, *speed)
 	}

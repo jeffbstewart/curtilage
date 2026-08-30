@@ -99,6 +99,33 @@ func TestApplyUpsertsAndReorders(t *testing.T) {
 	}
 }
 
+func TestHistory(t *testing.T) {
+	s := New(time.Hour)
+	e := ev(1, "a")
+	s.Apply(t0, policy.Change{Op: policy.OpStarted, Event: e})
+	e.Zones = []string{"yard"}
+	s.Apply(t0.Add(time.Second), policy.Change{Op: policy.OpUpdated, Event: e})
+	e.EndedAt = t0.Add(time.Minute)
+	s.Apply(t0.Add(time.Minute), policy.Change{Op: policy.OpEnded, Event: e})
+	h := s.History("e001")
+	if len(h) != 3 || h[0].Op != policy.OpStarted || h[1].Op != policy.OpUpdated || h[2].Op != policy.OpEnded ||
+		len(h[0].Event.Zones) != 0 || len(h[1].Event.Zones) != 1 || h[2].Event.Running() {
+		t.Fatalf("history = %+v", h)
+	}
+	if s.History("nope") != nil {
+		t.Error("history of an unknown event")
+	}
+	// Bounded: the first revision survives, the middle is dropped.
+	for i := 0; i < 200; i++ {
+		e.Zones = append(e.Zones, "z")
+		s.Apply(t0.Add(time.Hour), policy.Change{Op: policy.OpUpdated, Event: e})
+	}
+	h = s.History("e001")
+	if len(h) != maxHistory || h[0].Op != policy.OpStarted || len(h[len(h)-1].Event.Zones) != 201 {
+		t.Errorf("bounded history: %d revisions, first %v, last zones %d", len(h), h[0].Op, len(h[len(h)-1].Event.Zones))
+	}
+}
+
 func TestPrune(t *testing.T) {
 	s := New(time.Hour)
 	fill(s, 120) // two hours of one-a-minute

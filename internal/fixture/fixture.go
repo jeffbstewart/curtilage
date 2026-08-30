@@ -29,6 +29,23 @@ import (
 //	  -drop '^frigate/garage/'
 const Driveway = "driveway-20260830T11.mcap"
 
+// WalkOut and WalkBack are the household leaving for a dog walk
+// (2026-08-30 16:04:49-16:06:14 UTC: porch-west -> porch-down/north ->
+// porch-east -> driveway-corner -> driveway-winchester/fence; two
+// people and a dog, 26 Frigate objects) and coming back 22 minutes
+// later in reverse.  Each is ONE thing that happened; the engine's job
+// is to say so.  Same topics as Driveway, cut from the same day:
+//
+//	curtilage trim -file curtilage-20260830T125953Z.mcap \
+//	  -out internal/fixture/testdata/walk-out-20260830T1604.mcap \
+//	  -from 2026-08-30T16:03:30Z -to 2026-08-30T16:08:00Z -keep '<as Driveway>'
+//	curtilage trim ... -out walk-back-20260830T1627.mcap \
+//	  -from 2026-08-30T16:27:30Z -to 2026-08-30T16:31:00Z ...
+const (
+	WalkOut  = "walk-out-20260830T1604.mcap"
+	WalkBack = "walk-back-20260830T1627.mcap"
+)
+
 // Path is the on-disk path of a fixture.
 func Path(t testing.TB, name string) string {
 	t.Helper()

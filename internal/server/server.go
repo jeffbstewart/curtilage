@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sort"
 	"time"
 
 	"google.golang.org/grpc"
@@ -128,10 +129,20 @@ func ToProto(e policy.Event) *curtilagev1.Event {
 		StartedAt:   timestamppb.New(e.StartedAt),
 		HasSnapshot: e.HasSnapshot,
 		Clip:        clipToProto(e.Clip),
-		Debug:       &curtilagev1.EventDebug{SourceId: e.SourceID},
+		Debug:       &curtilagev1.EventDebug{SourceId: e.SourceID, SourceIds: e.SourceIDs},
+		Path:        e.Path,
+		Cameras:     e.Cameras,
 	}
 	if !e.EndedAt.IsZero() {
 		out.EndedAt = timestamppb.New(e.EndedAt)
+	}
+	labels := make([]string, 0, len(e.Objects))
+	for l := range e.Objects {
+		labels = append(labels, l)
+	}
+	sort.Strings(labels)
+	for _, l := range labels {
+		out.Objects = append(out.Objects, &curtilagev1.ObjectCount{Label: l, Count: uint32(e.Objects[l])})
 	}
 	return out
 }
@@ -146,6 +157,8 @@ func kindToProto(k policy.Kind) curtilagev1.EventKind {
 		return curtilagev1.EventKind_EVENT_KIND_PACKAGE
 	case policy.KindDetection:
 		return curtilagev1.EventKind_EVENT_KIND_DETECTION
+	case policy.KindActivity:
+		return curtilagev1.EventKind_EVENT_KIND_ACTIVITY
 	}
 	return curtilagev1.EventKind_EVENT_KIND_UNKNOWN
 }

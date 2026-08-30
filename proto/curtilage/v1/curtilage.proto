@@ -104,6 +104,16 @@ enum EventKind {
   // A tracked object the engine passed through without a stronger
   // verdict.  The list is built on these; pushes are not.
   EVENT_KIND_DETECTION = 4;
+  // People (and dogs) moving about the curtilage: many Frigate objects
+  // across cameras, one thing that happened.  objects, path and
+  // cameras describe it; they grow while it is running.
+  EVENT_KIND_ACTIVITY = 5;
+}
+
+// How many of a label an activity involved, e.g. {person, 2}.
+message ObjectCount {
+  string label = 1;
+  uint32 count = 2;
 }
 
 // Whether there is a clip to play, and whether it is still growing.
@@ -139,6 +149,16 @@ message Event {
   ClipState clip = 10;
   // See EventDebug.  Nothing in the app depends on it.
   EventDebug debug = 11;
+  // For EVENT_KIND_ACTIVITY: what was there, how many of each --
+  // {person, 2}, {dog, 1}.  label above is then the first of these.
+  repeated ObjectCount objects = 12;
+  // For EVENT_KIND_ACTIVITY: the named zones in the order first
+  // entered -- ["porch", "yard", "driveway"].  zones above carries the
+  // same list.
+  repeated string path = 13;
+  // Every camera that saw it, in the order they first did; camera
+  // above is the first.
+  repeated string cameras = 14;
 }
 
 // Where an Event came from, for logs and human eyes only.  This
@@ -147,8 +167,10 @@ message Event {
 // client must not branch on anything in it.
 message EventDebug {
   // The perception layer's own id for the underlying object (a
-  // Frigate event id).
+  // Frigate event id).  For an activity, the one the snapshot is of.
   string source_id = 1;
+  // For an activity: every Frigate object folded into it.
+  repeated string source_ids = 2;
 }
 
 message ListEventsRequest {
