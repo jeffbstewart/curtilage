@@ -23,7 +23,7 @@ func sample(n int, base time.Time) []*Record {
 			ReceivedAt: timestamppb.New(base.Add(time.Duration(i) * time.Millisecond)),
 			Topic:      topics[i%len(topics)],
 			Retained:   i%3 == 2,
-			Qos:        curtilagev1.Qos(i%3 + 1), // the three real levels, never UNSPECIFIED
+			Qos:        curtilagev1.Qos(i%3 + 1),                 // the three real levels, never UNSPECIFIED
 			Payload:    []byte{byte(i), 0xff, 0x00, byte(i * 7)}, // arbitrary bytes, not text
 		})
 		recs[i].PayloadCrc32C = Checksum(recs[i].Payload)
