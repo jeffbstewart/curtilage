@@ -36,6 +36,19 @@ func handler(t *testing.T) *Handler {
 	live := ev("live", policy.KindArrival, 5*time.Minute, true)
 	live.EndedAt = time.Time{}
 	st.Apply(now, policy.Change{Op: policy.OpStarted, Event: live})
+	// An activity that evolved: three sentences, one repeated.
+	act := policy.Event{ID: "walk", Kind: policy.KindActivity, Camera: "porch-west", Cameras: []string{"porch-west"},
+		Label: "person", Objects: map[string]int{"person": 1}, Path: []string{"porch"}, Zones: []string{"porch"},
+		StartedAt: now.Add(-10 * time.Minute), HasSnapshot: true, SourceID: "src-walk-1", SourceIDs: []string{"src-walk-1"}}
+	st.Apply(now.Add(-10*time.Minute), policy.Change{Op: policy.OpStarted, Event: act})
+	act.Cameras = append(act.Cameras, "porch-east")
+	act.SourceIDs = append(act.SourceIDs, "src-walk-2")
+	st.Apply(now.Add(-9*time.Minute), policy.Change{Op: policy.OpUpdated, Event: act}) // same sentence: folded
+	act.Objects = map[string]int{"person": 1, "dog": 1}
+	st.Apply(now.Add(-8*time.Minute), policy.Change{Op: policy.OpUpdated, Event: act})
+	act.Path, act.Zones = []string{"porch", "yard"}, []string{"porch", "yard"}
+	act.EndedAt = now.Add(-7 * time.Minute)
+	st.Apply(now.Add(-7*time.Minute), policy.Change{Op: policy.OpEnded, Event: act})
 	return &Handler{
 		Store: st, API: &server.Server{Store: st, Keys: kr, LinkTTL: time.Hour},
 		Allow: allow, Proxies: proxies, DisplayName: "test house", Now: func() time.Time { return now },
@@ -97,7 +110,12 @@ func TestPageViews(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	// Default: sent only. Window 24h: pkg-old (30h) is out.
-	for _, want := range []string{"3 events", "1 still running", "1</b> not sent are hidden", "src-arr-new", "src-live", "household: 2", "nobody (list only): 1", "/media/", `<span class="live">live</span>`} {
+	for _, want := range []string{"4 events", "1 still running", "1</b> not sent are hidden", "src-arr-new", "src-live", "household: 3", "nobody (list only): 1", "/media/", `<span class="live">live</span>`,
+		// The activity: its final sentence, then how it evolved, newest
+		// first, with the no-change revision folded away.
+		"<b>Person and a dog started on the porch, moved to the yard (3m0s)</b>",
+		"<li>11:52:00  Person and a dog on the porch</li><li>11:50:00  Person on the porch</li>",
+		"porch-west, porch-east", "2 objects src-walk-1"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sent view lacks %q", want)
 		}

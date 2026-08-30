@@ -12,6 +12,7 @@
 package house
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net"
@@ -114,6 +115,11 @@ type row struct {
 	Thumb    string // media link path, or ""
 	Live     bool
 	SourceID string
+	// What is the one sentence (policy.Describe); History is every
+	// earlier sentence, newest first, with when it was said -- how the
+	// engine's understanding evolved.
+	What    string
+	History []string
 }
 
 type page struct {
@@ -220,6 +226,29 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 	if e.SubLabel != "" {
 		rw.Label += " (" + e.SubLabel + ")"
 	}
+	rw.What = policy.Describe(e)
+	if e.Kind == policy.KindActivity {
+		rw.Camera = strings.Join(e.Cameras, ", ")
+		rw.Label = fmt.Sprintf("%d objects", len(e.SourceIDs))
+		// Newest first; the current state is What.  A revision that
+		// changed nothing a person would read (a camera, a snapshot)
+		// is folded into the one before it.
+		// Each line carries the time its wording was FIRST reached.
+		hist := h.Store.History(e.ID)
+		prev := rw.What
+		for i := len(hist) - 2; i >= 0; i-- {
+			text := policy.Describe(hist[i].Event)
+			when := hist[i].At.In(h.loc()).Format("15:04:05")
+			if text == prev {
+				if n := len(rw.History); n > 0 {
+					rw.History[n-1] = when + "  " + text // same words, earlier
+				}
+				continue
+			}
+			prev = text
+			rw.History = append(rw.History, when+"  "+text)
+		}
+	}
 	end := e.EndedAt
 	if end.IsZero() {
 		end = now
@@ -262,6 +291,8 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  .aud-nobody { color: #888; }
  .aud-household { color: #060; font-weight: 600; }
  .src { color: #999; font-size: .75rem; font-family: ui-monospace, monospace; }
+ ul.hist { margin: .2rem 0 0 1rem; padding: 0; color: #666; font-size: .85rem; }
+ ul.hist li { margin: 0; white-space: normal; }
 </style>
 <h1>{{.DisplayName}}: the last {{.Hours}} hours</h1>
 <div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
@@ -271,11 +302,11 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <div><b>By verdict</b>{{range .ByVerdict}}{{.Name}}: {{.N}}<br>{{end}}</div>
 </div>
 <table>
-<tr><th>When</th><th>Camera</th><th>What</th><th>Zones</th><th>For</th><th>Clip</th><th>Verdict</th><th>Audience</th><th>Snapshot</th></tr>
+<tr><th>When</th><th>Cameras</th><th>What</th><th>Zones</th><th>For</th><th>Clip</th><th>Verdict</th><th>Audience</th><th>Snapshot</th></tr>
 {{range .Rows}}<tr>
  <td>{{.When}}{{if .Live}} <span class="live">live</span>{{end}}</td>
- <td>{{.Camera}}</td>
- <td>{{.Label}}<br><span class="src">{{.SourceID}}</span></td>
+ <td class="z">{{.Camera}}</td>
+ <td class="z"><b>{{.What}}</b>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
  <td>{{.Clip}}</td>

@@ -37,7 +37,21 @@ type Store struct {
 type entry struct {
 	ev        policy.Event
 	updatedAt time.Time
+	// history is every state the event has been in, oldest first:
+	// how the engine's understanding evolved.  Bounded.
+	history []Revision
 }
+
+// Revision is one state an event was in, and when it was said.
+type Revision struct {
+	At    time.Time
+	Op    policy.Op
+	Event policy.Event
+}
+
+// maxHistory bounds an event's revisions; an activity gets a few
+// dozen updates at most, a parked car could heartbeat forever.
+const maxHistory = 64
 
 // New returns an empty store keeping events for retention.
 func New(retention time.Duration) *Store {
@@ -61,15 +75,32 @@ func (s *Store) Apply(at time.Time, c policy.Change) {
 		s.cameras[c.Event.Camera] = true
 	}
 	e, ok := s.byID[c.Event.ID]
+	var history []Revision
 	if ok {
 		s.remove(e)
+		history = e.history
 	}
-	e = &entry{ev: c.Event, updatedAt: at}
+	history = append(history, Revision{At: at, Op: c.Op, Event: c.Event})
+	if len(history) > maxHistory {
+		history = append(history[:1], history[len(history)-maxHistory+1:]...) // keep the first, drop the middle
+	}
+	e = &entry{ev: c.Event, updatedAt: at, history: history}
 	s.byID[c.Event.ID] = e
 	s.insert(e)
 	for sub := range s.subs {
 		sub.offer(c)
 	}
+}
+
+// History is every state the event has been in, oldest first.
+func (s *Store) History(id string) []Revision {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	e, ok := s.byID[id]
+	if !ok {
+		return nil
+	}
+	return append([]Revision(nil), e.history...)
 }
 
 // SawCamera notes a camera name seen in a topic, so ListCameras knows

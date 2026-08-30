@@ -26,6 +26,12 @@ instance.  Media (snapshots, from `frigate.url`) is served by the API's
 `GetMedia` and by capability links, `GET /media/<token>`, that authorise
 one event's media for `links.ttl` and 404 identically for anything else.
 `GET /` is a landing page naming the installation and its pages.
+The policy engine folds people and dogs moving about into one
+*activity* per thing that happened (`EVENT_KIND_ACTIVITY`: counts per
+label, the zones in order, every camera), described in one sentence
+that improves as it goes -- "Person on the porch" becoming "2 persons
+and a dog started on the porch, moved to the yard, then the driveway
+(1m25s)"; cars and the rest pass through as detections for now.
 `GET /house/` is the in-the-house page -- the last day of events with
 the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,

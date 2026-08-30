@@ -27,6 +27,9 @@ const (
 	KindDeparture
 	KindPackage
 	KindDetection
+	// KindActivity is people (and dogs) moving about: many Frigate
+	// objects across cameras folded into one event (incidents.go).
+	KindActivity
 )
 
 // ClipState is whether there is a clip and whether it is done.
@@ -56,7 +59,17 @@ type Event struct {
 	HasSnapshot bool
 	Clip        ClipState
 	// The perception layer's id (a Frigate event id).  Debug only.
+	// For an activity, the object the snapshot is of.
 	SourceID string
+
+	// Activity only (KindActivity): how many of each label, the named
+	// zones in the order first entered (Zones carries the same), every
+	// camera in the order they first saw it (Camera is the first), and
+	// every Frigate object folded in.
+	Objects   map[string]int
+	Path      []string
+	Cameras   []string
+	SourceIDs []string
 }
 
 // Running reports whether the event has not ended.
@@ -69,7 +82,7 @@ func (e Event) Running() bool { return e.EndedAt.IsZero() }
 // "Policy").
 func Audience(k Kind) string {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage:
+	case KindArrival, KindDeparture, KindPackage, KindActivity:
 		return "household"
 	case KindDetection:
 		return "nobody (list only)"
@@ -80,7 +93,7 @@ func Audience(k Kind) string {
 // Sent reports whether an event of this kind goes to anyone.
 func Sent(k Kind) bool {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage:
+	case KindArrival, KindDeparture, KindPackage, KindActivity:
 		return true
 	}
 	return false
@@ -97,6 +110,8 @@ func (k Kind) String() string {
 		return "package"
 	case KindDetection:
 		return "detection"
+	case KindActivity:
+		return "activity"
 	}
 	return "unknown"
 }
