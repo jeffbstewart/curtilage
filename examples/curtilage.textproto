@@ -1,0 +1,23 @@
+# curtilage server configuration -- protobuf text format
+# (proto/curtilage/v1/config.proto).  A typo is a parse error, not a
+# silently ignored key.  Credentials are NOT here: the server reads
+# CURTILAGE_MQTT_USER and CURTILAGE_MQTT_PASSWORD from the environment.
+#
+# A household keeps its own copy wherever its deployment config lives
+# (a ConfigMap, a compose bind mount); this is the example.
+
+mqtt {
+  host: "mosquitto.cameras.svc.cluster.local"
+  port: 1883
+  client_id: "curtilage"
+  subscriptions: "frigate/#"
+  publish_prefix: "curtilage"     # <prefix>/available carries the last will
+  keepalive { seconds: 30 }
+}
+
+recording {
+  dir: "/var/lib/curtilage/recordings"   # empty = do not record
+  rotate_every { seconds: 86400 }        # one MCAP file per day (UTC)
+}
+
+listen: ":9118"                          # /metrics and /healthz

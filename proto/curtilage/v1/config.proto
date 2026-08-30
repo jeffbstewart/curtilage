@@ -1,0 +1,43 @@
+// Server configuration (docs/DESIGN.md).  The household's file is
+// protobuf TEXT FORMAT (curtilage.textproto): human-editable, commented,
+// and typed against this schema -- a typo is a parse error, not a
+// silently ignored key.  Credentials are never in the file; they come
+// from the environment (CURTILAGE_MQTT_USER / CURTILAGE_MQTT_PASSWORD).
+syntax = "proto3";
+
+package curtilage.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
+
+message Config {
+  Mqtt mqtt = 1;
+  Recording recording = 2;
+  // Address for /metrics (and, later, the API), e.g. ":9118".
+  string listen = 3;
+}
+
+message Mqtt {
+  // Broker host, e.g. "mosquitto.cameras.svc.cluster.local".
+  string host = 1;
+  // Broker port; 1883 if unset.
+  uint32 port = 2;
+  // MQTT client id; "curtilage" if unset.  Must be unique per broker.
+  string client_id = 3;
+  // Topic filters to subscribe to, e.g. "frigate/#".
+  repeated string subscriptions = 4;
+  // Topic prefix curtilage publishes under (availability, later
+  // conclusions); "curtilage" if unset.
+  string publish_prefix = 5;
+  // Keepalive; 30s if unset.
+  google.protobuf.Duration keepalive = 6;
+}
+
+message Recording {
+  // Directory for MCAP files; recording is off when empty.
+  string dir = 1;
+  // Start a new file this often; 24h if unset.  Files are named by
+  // their start time (UTC): curtilage-YYYYMMDDTHHMMSSZ.mcap.
+  google.protobuf.Duration rotate_every = 2;
+}

@@ -9,7 +9,22 @@ news, and an app that shows them -- fast, with a picture, a clip that
 plays now, and a live view one tap away -- without exposing Frigate or
 Home Assistant to the internet.
 
-Status: design.  See [docs/DESIGN.md](docs/DESIGN.md).
+Status: phase 1 (ingest + record).  See [docs/DESIGN.md](docs/DESIGN.md).
+
+    curtilage run -config curtilage.textproto     # watch the broker, record to MCAP
+    curtilage replay -file curtilage-<start>.mcap  # summarize a recording
+    curtilage version
+
+Configuration is protobuf text format (`examples/curtilage.textproto`,
+schema `proto/curtilage/v1/config.proto`); credentials come from
+`CURTILAGE_MQTT_USER` / `CURTILAGE_MQTT_PASSWORD`.  Recordings are
+MCAP files, one channel per MQTT topic, `curtilage.v1.Record`
+messages with the schema embedded -- `mcap info` and Foxglove read
+them directly.  `/metrics` (Prometheus) and `/healthz` on `listen`.
+
+Shutdown: SIGTERM/SIGINT publishes `offline`, disconnects, finishes
+the current MCAP (summary + footer) and exits; a file torn by SIGKILL
+is still readable up to the last complete chunk (`replay` says so).
 
 ## Development
 

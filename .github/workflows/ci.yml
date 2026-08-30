@@ -14,6 +14,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -64,6 +65,11 @@ jobs:
           archive: false
           pr_comment: false   # would need pull-requests: write; CI stays read-only
 
+      # Generated Go must match the schema: regenerate and diff.
+      - name: buf generate is clean
+        run: |
+          cd proto && buf generate && cd .. && git diff --exit-code -- gen || { echo "gen/ is stale: run buf generate in proto/"; exit 1; }
+
       # Secret scan over the whole tree (diff from the empty tree), plus
       # the scanner's own tests.  Same checker as the sibling repos.
       - name: Secret scan
@@ -82,3 +88,33 @@ jobs:
         env:
           FORGE_LINT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go run github.com/jeffbstewart/cloister/cmd/forge-lint@main -config .github/forge-lint.yaml -allow-unverified
+
+  image:
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, resolved 2026-08-27
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3, resolved 2026-08-27
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5, resolved 2026-08-27
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6, resolved 2026-08-27
+        with:
+          context: .
+          push: true
+          build-args: VERSION=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

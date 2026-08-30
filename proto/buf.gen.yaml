@@ -1,0 +1,12 @@
+# Generated Go lives in gen/ and is COMMITTED, so `go build` needs no
+# buf; CI regenerates and fails on any diff.  Swift comes with the app.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/jeffbstewart/curtilage/gen
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.10
+    out: ../gen
+    opt: paths=source_relative
