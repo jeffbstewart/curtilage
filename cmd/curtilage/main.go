@@ -14,6 +14,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -342,6 +343,7 @@ func pruneHourly(ctx context.Context, st *store.Store, dir string) {
 // recording is off.
 func adminMux(rotator *record.Rotator, st *store.Store, api *server.Server) *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", rootPage(api)) // exactly "/": everything else unknown stays a 404
 	mux.Handle("/metrics", metrics.Handler(version, st))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
 	if api != nil {
@@ -491,3 +493,41 @@ func cmdTrim(args []string) error {
 	fmt.Printf("%d of %d records -> %s\n", len(kept), len(recs), *out)
 	return nil
 }
+
+// rootPage is what a person sees at https://<name>/: what this is
+// and where the pages are.  It says nothing an unauthenticated caller
+// should not know; /house/ still decides for itself who may see it.
+func rootPage(api *server.Server) http.HandlerFunc {
+	name := "curtilage"
+	if api != nil && api.DisplayName != "" {
+		name = api.DisplayName
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if err := rootTmpl.Execute(w, struct{ Name, Version string }{name, versionString()}); err != nil {
+			log.Printf("root: render: %v", err)
+		}
+	}
+}
+
+var rootTmpl = template.Must(template.New("root").Parse(`<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Name}}</title>
+<style>
+ body { font: 16px/1.5 system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; padding: 0 1rem; color: #222; background: #fafafa; }
+ h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+ .v { color: #666; margin-bottom: 1.5rem; }
+ li { margin: .4rem 0; }
+ code { background: #eee; padding: 0 .3rem; border-radius: 3px; }
+</style>
+<h1>{{.Name}}</h1>
+<div class="v">{{.Version}} -- the camera-event policy engine</div>
+<ul>
+ <li><a href="/house/">The house page</a>: the last day of events with the engine's verdict and audience (<a href="/house/?view=all">everything</a>, including what was not sent). In the house only.</li>
+ <li><a href="/metrics">Metrics</a> (Prometheus) and <a href="/healthz">health</a>.</li>
+ <li>The app talks gRPC (<code>curtilage.v1.CurtilageService</code>) on this same address.</li>
+</ul>
+`))

@@ -110,6 +110,21 @@ func TestOneListenerServesGRPCAndHTTP(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	// The root is a landing page; anything else unknown is still a 404.
+	for path, want := range map[string]int{"/": 200, "/nope": 404, "/house": 404, "/media/x": 404} {
+		resp, err := http.Get("http://" + lis.Addr().String() + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("GET %s -> %d, want %d", path, resp.StatusCode, want)
+		}
+		if path == "/" && (!strings.Contains(string(b), "<title>house</title>") || !strings.Contains(string(b), "/house/")) {
+			t.Errorf("root page:\n%s", b)
+		}
+	}
 	if !strings.Contains(string(body), "curtilage_events 0") || !strings.Contains(string(body), "curtilage_retention_seconds 3600") {
 		t.Errorf("metrics lack store gauges:\n%s", body)
 	}
