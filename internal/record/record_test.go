@@ -103,8 +103,12 @@ func TestIdleRotation(t *testing.T) {
 	in <- &Record{ReceivedAt: timestamppb.Now(), Topic: "a", Payload: []byte("1")}
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		if recs, err := ReadAll(context.Background(), firstFile(t, dir)); err == nil && len(recs) == 1 {
-			break // complete (footer present) without any further write
+		// The send above returns before Write has opened the file, so
+		// "no file yet" is a state to wait through, not a failure.
+		if files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap")); len(files) == 1 {
+			if recs, err := ReadAll(context.Background(), files[0]); err == nil && len(recs) == 1 {
+				break // complete (footer present) without any further write
+			}
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("idle file was never rotated")
@@ -151,15 +155,6 @@ func TestForcedRotation(t *testing.T) {
 	if files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap")); len(files) != 2 {
 		t.Fatalf("want 2 files, got %v", files)
 	}
-}
-
-func firstFile(t *testing.T, dir string) string {
-	t.Helper()
-	files, _ := filepath.Glob(filepath.Join(dir, "curtilage-*.mcap"))
-	if len(files) == 0 {
-		t.Fatal("no recording yet")
-	}
-	return files[0]
 }
 
 func TestCancelStillClosesFile(t *testing.T) {
