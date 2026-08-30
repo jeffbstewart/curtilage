@@ -12,3 +12,5 @@ file:presubmit-check-test.sh
 # workflow, image digests in the Dockerfile.
 file:ci.yml
 file:Dockerfile
+# buf.lock pins the well-known-types module by commit and digest.
+file:buf.lock
