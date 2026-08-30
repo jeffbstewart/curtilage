@@ -10,14 +10,29 @@ import (
 
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/record"
+	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
-// Handler serves /metrics.
-func Handler(version string) http.Handler {
+// Handler serves /metrics.  st may be nil when there is no event
+// store (record-only runs).
+func Handler(version string, st *store.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		conn, reconn, dropped, msgs := mqtt.Stats()
 		written, files, werrs := record.Stats()
+		if st != nil {
+			s := st.Stats()
+			fmt.Fprintf(w, "# HELP curtilage_events Events in the store.\n# TYPE curtilage_events gauge\n")
+			fmt.Fprintf(w, "curtilage_events %d\n", s.Events)
+			fmt.Fprintf(w, "# HELP curtilage_events_live Events still running.\n# TYPE curtilage_events_live gauge\n")
+			fmt.Fprintf(w, "curtilage_events_live %d\n", s.Live)
+			fmt.Fprintf(w, "# HELP curtilage_event_changes_total Changes the policy engine emitted.\n# TYPE curtilage_event_changes_total counter\n")
+			fmt.Fprintf(w, "curtilage_event_changes_total %d\n", s.Applied)
+			fmt.Fprintf(w, "# HELP curtilage_events_pruned_total Events forgotten at the edge of retention.\n# TYPE curtilage_events_pruned_total counter\n")
+			fmt.Fprintf(w, "curtilage_events_pruned_total %d\n", s.Pruned)
+			fmt.Fprintf(w, "# HELP curtilage_watchers Open WatchEvents streams.\n# TYPE curtilage_watchers gauge\n")
+			fmt.Fprintf(w, "curtilage_watchers %d\n", s.Watchers)
+		}
 
 		fmt.Fprintf(w, "# HELP curtilage_build_info Build information.\n# TYPE curtilage_build_info gauge\n")
 		fmt.Fprintf(w, "curtilage_build_info{version=%q} 1\n", version)

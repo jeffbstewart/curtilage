@@ -14,8 +14,12 @@ option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilag
 message Config {
   Mqtt mqtt = 1;
   Recording recording = 2;
-  // Address for /metrics (and, later, the API), e.g. ":9118".
+  // Address for the API, /metrics, /healthz and /admin, e.g. ":9118".
+  // One listener: gRPC (h2c) and HTTP share it, as MediaManager does.
   string listen = 3;
+  // What the app calls this installation (GetServerInfo);
+  // "curtilage" if unset.
+  string display_name = 4;
 }
 
 message Mqtt {
@@ -40,4 +44,9 @@ message Recording {
   // Start a new file this often; 24h if unset.  Files are named by
   // their start time (UTC): curtilage-YYYYMMDDTHHMMSSZ.mcap.
   google.protobuf.Duration rotate_every = 2;
+  // How long events are kept, in memory and as files on disk; older
+  // ones are pruned hourly.  7 days if unset.  The event store is
+  // rebuilt from these files at startup, so this is also how far back
+  // ListEvents can go.
+  google.protobuf.Duration retention = 3;
 }

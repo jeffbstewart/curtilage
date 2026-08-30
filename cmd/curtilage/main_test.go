@@ -3,15 +3,20 @@ package main
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/record"
+	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
 func TestVersionString(t *testing.T) {
@@ -27,7 +32,7 @@ func TestRotateEndpoint(t *testing.T) {
 	go func() {
 		errc <- record.Write(context.Background(), record.Options{Dir: t.TempDir(), RotateEvery: time.Hour, Rotate: rot.Chan()}, in)
 	}()
-	srv := httptest.NewServer(adminMux(rot))
+	srv := httptest.NewServer(adminMux(rot, nil))
 	defer srv.Close()
 
 	post := func() (int, string) {
@@ -61,7 +66,7 @@ func TestRotateEndpoint(t *testing.T) {
 }
 
 func TestRotateEndpointWithoutRecording(t *testing.T) {
-	srv := httptest.NewServer(adminMux(nil))
+	srv := httptest.NewServer(adminMux(nil, nil))
 	defer srv.Close()
 	resp, err := http.Post(srv.URL+"/admin/rotate", "", nil)
 	if err != nil {
@@ -70,5 +75,42 @@ func TestRotateEndpointWithoutRecording(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 when recording is off", resp.StatusCode)
+	}
+}
+
+// One listener, two protocols: gRPC over h2c and plain HTTP/1.1.
+func TestOneListenerServesGRPCAndHTTP(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &curtilagev1.Config{Listen: lis.Addr().String(), DisplayName: "house"}
+	srv, gs := httpServer(cfg, store.New(time.Hour), nil)
+	go srv.Serve(lis)
+	t.Cleanup(func() { shutdown(srv, gs) })
+
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	info, err := curtilagev1.NewCurtilageServiceClient(conn).GetServerInfo(context.Background(),
+		&curtilagev1.GetServerInfoRequest{ApiVersion: 1, Platform: curtilagev1.Platform_PLATFORM_IOS})
+	if err != nil || info.GetDisplayName() != "house" {
+		t.Fatalf("gRPC over h2c: %v, %v", info, err)
+	}
+	resp, err := http.Get("http://" + lis.Addr().String() + "/healthz")
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("HTTP/1.1 on the same port: %v, %v", resp, err)
+	}
+	resp.Body.Close()
+	resp, err = http.Get("http://" + lis.Addr().String() + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), "curtilage_events 0") {
+		t.Errorf("metrics lack store gauges:\n%s", body)
 	}
 }

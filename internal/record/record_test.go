@@ -217,6 +217,17 @@ func TestFileName(t *testing.T) {
 	if got != "curtilage-20260830T020509Z.mcap" {
 		t.Errorf("FileName = %q (must be UTC)", got)
 	}
+	want := time.Date(2026, 8, 30, 2, 5, 9, 0, time.UTC)
+	for _, name := range []string{got, "curtilage-20260830T020509Z-1.mcap"} {
+		if start, ok := ParseFileName(name); !ok || !start.Equal(want) {
+			t.Errorf("ParseFileName(%q) = %v, %v", name, start, ok)
+		}
+	}
+	for _, name := range []string{"cut.mcap", "curtilage-2026.mcap", "curtilage-20260830T020509Z.txt", "notes.txt"} {
+		if _, ok := ParseFileName(name); ok {
+			t.Errorf("ParseFileName(%q) accepted", name)
+		}
+	}
 }
 
 func TestReadRejectsGarbage(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -208,6 +209,25 @@ type file struct {
 // FileName is the name of the file started at t.
 func FileName(t time.Time) string {
 	return "curtilage-" + t.UTC().Format("20060102T150405Z") + ".mcap"
+}
+
+// ParseFileName is FileName's inverse: the start time of a recording
+// from its base name (a same-second "-N" suffix is accepted).  ok is
+// false for anything that is not one of our recordings.
+func ParseFileName(name string) (start time.Time, ok bool) {
+	const prefix, suffix = "curtilage-", ".mcap"
+	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+		return time.Time{}, false
+	}
+	stamp := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+	if i := strings.IndexByte(stamp, '-'); i >= 0 {
+		stamp = stamp[:i]
+	}
+	t, err := time.Parse("20060102T150405Z", stamp)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 func open(dir string, now time.Time) (*file, error) {

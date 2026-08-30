@@ -11,7 +11,8 @@ Home Assistant to the internet.
 
 Status: phase 1 (ingest + record).  See [docs/DESIGN.md](docs/DESIGN.md).
 
-    curtilage run -config curtilage.textproto     # watch the broker, record to MCAP
+    curtilage run -config curtilage.textproto     # watch the broker, record to MCAP, serve the API
+    curtilage run -config F -replay G.mcap -speed 10   # serve the API from a recording; no broker needed
     curtilage replay -file curtilage-<start>.mcap  # summarize a recording (-topic T -dump N prints payloads)
     curtilage trim -file F -out G -from T -to T -keep RE -drop RE   # cut a fixture from a recording
     curtilage version
