@@ -1,1 +1,6 @@
 * text=auto eol=lf
+
+# Protobuf bindings are generated (buf generate in proto/) and committed
+# so the Go module builds from a plain clone; GitHub collapses them in
+# diffs and leaves them out of language stats and line counts.
+gen/** linguist-generated=true
