@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/record"
@@ -32,6 +33,8 @@ func Handler(version string, st *store.Store) http.Handler {
 			fmt.Fprintf(w, "curtilage_events_pruned_total %d\n", s.Pruned)
 			fmt.Fprintf(w, "# HELP curtilage_watchers Open WatchEvents streams.\n# TYPE curtilage_watchers gauge\n")
 			fmt.Fprintf(w, "curtilage_watchers %d\n", s.Watchers)
+			fmt.Fprintf(w, "# HELP curtilage_retention_seconds How long events and recordings are kept.\n# TYPE curtilage_retention_seconds gauge\n")
+			fmt.Fprintf(w, "curtilage_retention_seconds %d\n", int64(st.Retention()/time.Second))
 		}
 
 		fmt.Fprintf(w, "# HELP curtilage_build_info Build information.\n# TYPE curtilage_build_info gauge\n")

@@ -110,7 +110,7 @@ func TestOneListenerServesGRPCAndHTTP(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(body), "curtilage_events 0") {
+	if !strings.Contains(string(body), "curtilage_events 0") || !strings.Contains(string(body), "curtilage_retention_seconds 3600") {
 		t.Errorf("metrics lack store gauges:\n%s", body)
 	}
 }
