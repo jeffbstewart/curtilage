@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,11 @@ func mediaServer(t *testing.T) (*Server, *httptest.Server) {
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Header().Set("Content-Length", strconv.Itoa(len(jpeg)))
 			w.Write(jpeg)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/a/start/") && strings.HasSuffix(r.URL.Path, "/clip.mp4") {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.Write([]byte("mp4" + r.URL.Path))
 			return
 		}
 		http.NotFound(w, r)
@@ -103,6 +109,51 @@ func TestGetMediaStreamsSnapshot(t *testing.T) {
 	stream, _ = c.GetMedia(ctx, &curtilagev1.GetMediaRequest{EventId: "with"})
 	if _, err := stream.Recv(); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("MEDIA_UNKNOWN -> %v, want InvalidArgument", err)
+	}
+}
+
+func TestGetMediaClip(t *testing.T) {
+	s, _ := mediaServer(t)
+	c := client(t, s)
+	stream, err := c.GetMedia(context.Background(), &curtilagev1.GetMediaRequest{EventId: "with", Media: curtilagev1.Media_MEDIA_CLIP})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := stream.Recv()
+	if err != nil || first.GetInfo().GetContentType() != "video/mp4" {
+		t.Fatalf("info = %v, %v", first, err)
+	}
+	var got []byte
+	for {
+		msg, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, msg.GetChunk()...)
+	}
+	// The stub echoes the path: leading camera "a", padded range.
+	if !strings.HasPrefix(string(got), "mp4/api/a/start/") {
+		t.Errorf("clip body %q", got)
+	}
+	// The capability path serves the same clip.
+	e, _ := s.Store.Get("with")
+	link, err := s.Link(e, curtilagev1.Media_MEDIA_CLIP, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := httptest.NewServer(s.MediaHandler())
+	defer web.Close()
+	resp, err := http.Get(web.URL + link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "video/mp4" || !strings.HasPrefix(string(body), "mp4/api/a/") {
+		t.Errorf("clip link -> %d %s %q", resp.StatusCode, resp.Header.Get("Content-Type"), body[:min(len(body), 40)])
 	}
 }
 

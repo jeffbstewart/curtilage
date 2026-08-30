@@ -113,6 +113,7 @@ type row struct {
 	Audience string
 	Clip     string
 	Thumb    string // media link path, or ""
+	ClipLink string // media link path for the clip, or ""
 	Live     bool
 	SourceID string
 	// What is the one sentence (policy.Describe); History is every
@@ -254,9 +255,16 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 		end = now
 	}
 	rw.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
-	if e.HasSnapshot && h.API != nil && h.API.Keys != nil {
-		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
-			rw.Thumb = link
+	if h.API != nil && h.API.Keys != nil {
+		if e.HasSnapshot {
+			if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
+				rw.Thumb = link
+			}
+		}
+		// The recording-range clip exists for any event with a camera;
+		// while the event runs it grows on each fetch.
+		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_CLIP, now); err == nil {
+			rw.ClipLink = link
 		}
 	}
 	return rw
@@ -309,7 +317,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td class="z"><b>{{.What}}</b>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
- <td>{{.Clip}}</td>
+ <td>{{if .ClipLink}}<a href="{{.ClipLink}}">play</a> ({{.Clip}}){{else}}{{.Clip}}{{end}}</td>
  <td>{{.Verdict}}</td>
  <td class="{{if eq .Audience "household"}}aud-household{{else}}aud-nobody{{end}}">{{.Audience}}</td>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>

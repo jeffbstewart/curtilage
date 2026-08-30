@@ -52,6 +52,18 @@ func (c *Client) Snapshot(ctx context.Context, eventID string) (*Media, error) {
 	return c.get(ctx, "/api/events/"+url.PathEscape(eventID)+"/snapshot.jpg", "image/jpeg")
 }
 
+// Clip is video cut from camera's continuous recordings over
+// [start, end], MP4.  It exists within seconds of the moment, long
+// before Frigate cuts an event's own clip, so it can be asked for
+// while the event is still running.
+func (c *Client) Clip(ctx context.Context, camera string, start, end time.Time) (*Media, error) {
+	if !validID(camera) || !end.After(start) {
+		return nil, ErrNotFound
+	}
+	path := fmt.Sprintf("/api/%s/start/%d/end/%d/clip.mp4", url.PathEscape(camera), start.Unix(), end.Unix())
+	return c.get(ctx, path, "video/mp4")
+}
+
 func (c *Client) get(ctx context.Context, path, wantType string) (*Media, error) {
 	u := *c.base
 	u.Path += path

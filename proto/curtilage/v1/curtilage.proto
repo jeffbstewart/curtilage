@@ -224,6 +224,10 @@ enum Media {
   MEDIA_UNKNOWN = 0;
   // The still image of the object, with its bounding box: JPEG.
   MEDIA_SNAPSHOT = 1;
+  // Video of the event from its leading camera, MP4, cut from the
+  // continuous recordings: [start - 5s, end + 5s], with end = now
+  // while the event is still running -- ask again, get more.
+  MEDIA_CLIP = 2;
 }
 
 message GetMediaRequest {

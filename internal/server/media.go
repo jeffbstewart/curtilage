@@ -26,6 +26,10 @@ import (
 // default receive limit.
 const chunkSize = 64 << 10
 
+// clipMargin pads a clip on both sides, so the approach and the
+// walking-away are in frame.
+const clipMargin = 5 * time.Second
+
 // Media counters for /metrics: the abuse signal for the public door.
 var (
 	linksMinted   atomic.Uint64
@@ -105,6 +109,17 @@ func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Me
 			return nil, status.Error(codes.NotFound, "no such event or media")
 		}
 		m, err = s.Frigate.Snapshot(ctx, e.SourceID)
+	case curtilagev1.Media_MEDIA_CLIP:
+		// The recording-range clip from the leading camera: playable
+		// the moment the event exists, growing until it ends.
+		start := e.StartedAt.Add(-clipMargin)
+		end := e.EndedAt
+		if end.IsZero() {
+			end = time.Now()
+		} else {
+			end = end.Add(clipMargin)
+		}
+		m, err = s.Frigate.Clip(ctx, e.Camera, start, end)
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "media %v is not one this server serves", media)
 	}

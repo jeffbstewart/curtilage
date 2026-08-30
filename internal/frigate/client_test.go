@@ -61,6 +61,41 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
+func TestClip(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.URL.Path == "/api/porch-north/start/1788116840/end/1788116990/clip.mp4" {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.Write([]byte("mp4-bytes"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	c, _ := NewClient(srv.URL)
+	ctx := context.Background()
+	start, end := time.Unix(1788116840, 0), time.Unix(1788116990, 0)
+	m, err := c.Clip(ctx, "porch-north", start, end)
+	if err != nil {
+		t.Fatalf("%v (path %s)", err, gotPath)
+	}
+	b, _ := io.ReadAll(m.Body)
+	m.Body.Close()
+	if m.ContentType != "video/mp4" || string(b) != "mp4-bytes" {
+		t.Errorf("clip = %+v %q", m, b)
+	}
+	if _, err := c.Clip(ctx, "nope", start, end); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown camera -> %v", err)
+	}
+	if _, err := c.Clip(ctx, "porch/../admin", start, end); !errors.Is(err, ErrNotFound) {
+		t.Errorf("hostile camera -> %v", err)
+	}
+	if _, err := c.Clip(ctx, "porch-north", end, start); !errors.Is(err, ErrNotFound) {
+		t.Errorf("inverted range -> %v", err)
+	}
+}
+
 func TestNewClientValidatesURL(t *testing.T) {
 	for _, bad := range []string{"", "frigate:5000", "ftp://x", "http://", "://"} {
 		if _, err := NewClient(bad); err == nil {

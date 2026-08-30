@@ -22,7 +22,9 @@ schema `proto/curtilage/v1/config.proto`); credentials come from the
 environment: `CURTILAGE_MQTT_USER` / `CURTILAGE_MQTT_PASSWORD`, and for
 media links `CURTILAGE_MEDIA_KEY` (current) / `CURTILAGE_MEDIA_KEY_PRIOR`
 (during a rotation), each `openssl rand -base64 32`, the same on every
-instance.  Media (snapshots, from `frigate.url`) is served by the API's
+instance.  Media (snapshots, and clips cut from the continuous recordings --
+playable while the event still runs, growing on each fetch) is
+served by the API's
 `GetMedia` and by capability links, `GET /media/<token>`, that authorise
 one event's media for `links.ttl` and 404 identically for anything else.
 `GET /` is a landing page naming the installation and its pages.
