@@ -18,7 +18,7 @@ func TestMintVerifyRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := Claims{EventID: "ABCDEFGHIJKLMNOPQRST", Media: 1, Expires: now.Add(4 * time.Hour)}
+	in := Claims{EventID: "ABCDEFGHIJKLMNOPQRST", Media: 2, Camera: "porch-north", Expires: now.Add(4 * time.Hour)}
 	tok := kr.Mint(in)
 	if strings.ContainsAny(tok, "+/=") {
 		t.Errorf("token is not URL-safe: %q", tok)
@@ -32,6 +32,18 @@ func TestMintVerifyRoundTrip(t *testing.T) {
 	}
 	if _, err := kr.Verify(tok, in.Expires.Add(-time.Second)); err != nil {
 		t.Errorf("a second before expiry -> %v", err)
+	}
+	// No camera round-trips as no camera.
+	in.Camera = ""
+	if got, err := kr.Verify(kr.Mint(in), now); err != nil || got != in {
+		t.Errorf("cameraless = %+v, %v", got, err)
+	}
+	// A camera name too long to be real mints as the leading camera
+	// rather than truncating into a different name.
+	in.Camera = strings.Repeat("x", 300)
+	got, err = kr.Verify(kr.Mint(in), now)
+	if err != nil || got.Camera != "" {
+		t.Errorf("oversized camera = %+v, %v", got, err)
 	}
 }
 

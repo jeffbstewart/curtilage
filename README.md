@@ -39,6 +39,9 @@ the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,
 `?hours=N` widens the window) -- served only to `house.allow_cidrs`,
 with `X-Forwarded-For` believed only from `house.trusted_proxies`.
+Each activity's sentence links to `/house/event/<id>`: every involved
+camera's clip of the same absolute window, time-synchronized, in a
+grid or in a follow-the-action mode driven by the sighting spans.
 It is the tool the rules are tuned with.  Times on it are in the
 configured `timezone` (IANA name; the zone database is compiled into
 the binary, so the container needs none).  Recordings are

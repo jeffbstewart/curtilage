@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -63,7 +64,7 @@ func (s *Server) GetMedia(req *curtilagev1.GetMediaRequest, stream grpc.ServerSt
 	if s.Frigate == nil {
 		return status.Error(codes.Unavailable, "media is not configured on this server (frigate.url)")
 	}
-	m, err := s.fetch(stream.Context(), req.GetEventId(), req.GetMedia())
+	m, err := s.fetch(stream.Context(), req.GetEventId(), req.GetMedia(), req.GetCamera())
 	if err != nil {
 		return err
 	}
@@ -94,12 +95,20 @@ func (s *Server) GetMedia(req *curtilagev1.GetMediaRequest, stream grpc.ServerSt
 	}
 }
 
-// fetch resolves an event id and media kind to a Frigate fetch, with
-// every failure a client may see collapsed to NotFound.
-func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Media) (*frigate.Media, error) {
+// fetch resolves an event id, media kind and optional camera to a
+// Frigate fetch, with every failure a client may see collapsed to
+// NotFound.  camera narrows a clip to one of the event's cameras; ""
+// is the leading one.
+func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Media, camera string) (*frigate.Media, error) {
 	e, ok := s.Store.Get(eventID)
 	if !ok {
 		return nil, status.Error(codes.NotFound, "no such event or media")
+	}
+	if camera != "" {
+		if media != curtilagev1.Media_MEDIA_CLIP || (camera != e.Camera && !slices.Contains(e.Cameras, camera)) {
+			return nil, status.Error(codes.NotFound, "no such event or media")
+		}
+		e.Camera = camera // this camera's view of the same window
 	}
 	var m *frigate.Media
 	var err error
@@ -140,11 +149,17 @@ func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Me
 // "/media/<token>", valid for LinkTTL from now.  It is the thing a
 // notification or the web page carries; the host is the caller's.
 func (s *Server) Link(e policy.Event, media curtilagev1.Media, now time.Time) (string, error) {
+	return s.CameraLink(e, media, "", now)
+}
+
+// CameraLink is Link narrowed to one camera's view (MEDIA_CLIP on a
+// multi-camera event); "" is the leading camera.
+func (s *Server) CameraLink(e policy.Event, media curtilagev1.Media, camera string, now time.Time) (string, error) {
 	if s.Keys == nil {
 		return "", errors.New("media links are not configured (CURTILAGE_MEDIA_KEY)")
 	}
 	linksMinted.Add(1)
-	return "/media/" + s.Keys.Mint(captoken.Claims{EventID: e.ID, Media: uint8(media), Expires: now.Add(s.LinkTTL)}), nil
+	return "/media/" + s.Keys.Mint(captoken.Claims{EventID: e.ID, Media: uint8(media), Camera: camera, Expires: now.Add(s.LinkTTL)}), nil
 }
 
 // MediaHandler serves GET /media/<token>: the capability URL.  Every
@@ -175,7 +190,7 @@ func (s *Server) MediaHandler() http.Handler {
 			return
 		}
 		linksOpened.Add(1)
-		m, err := s.fetch(r.Context(), claims.EventID, curtilagev1.Media(claims.Media))
+		m, err := s.fetch(r.Context(), claims.EventID, curtilagev1.Media(claims.Media), claims.Camera)
 		if err != nil {
 			if status.Code(err) == codes.Unavailable {
 				http.Error(w, "media source unavailable", http.StatusBadGateway)

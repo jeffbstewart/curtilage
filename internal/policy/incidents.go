@@ -225,6 +225,7 @@ func (e *Incidents) build(inc *incident, at time.Time, ended bool) Event {
 			anySnapshot = m.source
 		}
 		ev.SourceIDs = append(ev.SourceIDs, m.source)
+		ev.Spans = append(ev.Spans, Span{Camera: m.camera, Label: m.label, Start: m.start, End: m.end})
 		anyClip = anyClip || m.clip
 		end := m.end
 		if end.IsZero() {

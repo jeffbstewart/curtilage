@@ -14,8 +14,12 @@
 // never guesses.
 //
 // Token = base64url( kid[4] || claims || mac[16] ), mac = HMAC-SHA256
-// over kid||claims, truncated.  Claims are fixed-width big-endian:
-// expiry (int64 unix seconds), media (uint8), event id (the rest).
+// over kid||claims, truncated.  Claims are big-endian: expiry (int64
+// unix seconds), media (uint8), camera length (uint8) and camera
+// (which camera's view, for multi-camera events; empty means the
+// event's leading camera), event id (the rest).  The format is
+// internal and tokens live hours: changing it (as adding camera did)
+// just 404s links minted before the deploy.
 package captoken
 
 import (
@@ -44,7 +48,7 @@ const MinKeyLen = 32
 const (
 	kidLen   = 4
 	macLen   = 16
-	fixedLen = 8 + 1 // expiry + media
+	fixedLen = 8 + 1 + 1 // expiry + media + camera length
 )
 
 // Claims is what a token authorises.
@@ -52,6 +56,9 @@ type Claims struct {
 	EventID string
 	// Media kind, as the API's Media enum number.
 	Media uint8
+	// Which camera's view, for multi-camera events; "" is the event's
+	// leading camera.  At most 255 bytes.
+	Camera string
 	// Expiry, whole seconds.
 	Expires time.Time
 }
@@ -123,10 +130,14 @@ func (kr *Keyring) HasPrior() bool { return kr.prior != nil }
 // Mint signs claims with the current key.  Expires is rounded down to
 // the second.
 func (kr *Keyring) Mint(c Claims) string {
-	body := make([]byte, 0, kidLen+fixedLen+len(c.EventID)+macLen)
+	if len(c.Camera) > 255 {
+		c.Camera = "" // cannot be a real camera; the leading one then
+	}
+	body := make([]byte, 0, kidLen+fixedLen+len(c.Camera)+len(c.EventID)+macLen)
 	body = append(body, kr.current.id[:]...)
 	body = binary.BigEndian.AppendUint64(body, uint64(c.Expires.Unix()))
-	body = append(body, c.Media)
+	body = append(body, c.Media, byte(len(c.Camera)))
+	body = append(body, c.Camera...)
 	body = append(body, c.EventID...)
 	body = append(body, mac(kr.current.secret, body)...)
 	return base64.RawURLEncoding.EncodeToString(body)
@@ -149,10 +160,15 @@ func (kr *Keyring) Verify(token string, now time.Time) (Claims, error) {
 		return Claims{}, ErrBadMAC
 	}
 	claims := signed[kidLen:]
+	camLen := int(claims[9])
+	if len(claims) < fixedLen+camLen+1 {
+		return Claims{}, ErrMalformed
+	}
 	c := Claims{
 		Expires: time.Unix(int64(binary.BigEndian.Uint64(claims[:8])), 0).UTC(),
 		Media:   claims[8],
-		EventID: string(claims[fixedLen:]),
+		Camera:  string(claims[fixedLen : fixedLen+camLen]),
+		EventID: string(claims[fixedLen+camLen:]),
 	}
 	if !now.Before(c.Expires) {
 		return c, ErrExpired

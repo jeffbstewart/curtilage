@@ -176,6 +176,16 @@ func TestSoloWalkAnchorsOnZonedMembers(t *testing.T) {
 	if !a.HasSnapshot || a.Objects["person"] < 1 {
 		t.Errorf("snapshot=%v objects=%v", a.HasSnapshot, a.Objects)
 	}
+	// One span per member, each with a camera and a start; ended
+	// members have ends.
+	if len(a.Spans) != len(a.SourceIDs) {
+		t.Errorf("%d spans for %d members", len(a.Spans), len(a.SourceIDs))
+	}
+	for _, sp := range a.Spans {
+		if sp.Camera == "" || sp.Label == "" || sp.Start.IsZero() {
+			t.Errorf("bad span %+v", sp)
+		}
+	}
 	// This fixture predates the disjoint porch/yard geometry, so the
 	// path still opens with yard; the geometry fix owns that half.
 	if len(a.Path) == 0 || a.Path[len(a.Path)-1] != "driveway" {

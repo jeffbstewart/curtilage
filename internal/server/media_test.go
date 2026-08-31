@@ -157,6 +157,47 @@ func TestGetMediaClip(t *testing.T) {
 	}
 }
 
+func TestGetMediaClipPerCamera(t *testing.T) {
+	s, _ := mediaServer(t)
+	e, _ := s.Store.Get("with")
+	e.Cameras = []string{"cam-a", "cam-b"}
+	s.Store.Apply(time.Now(), policy.Change{Op: policy.OpUpdated, Event: e})
+	c := client(t, s)
+	ctx := context.Background()
+	// cam-b is one of the event's cameras but the stub only knows cam-a:
+	// the request reaches /api/cam-b/... and 404s -> NotFound.
+	stream, _ := c.GetMedia(ctx, &curtilagev1.GetMediaRequest{EventId: "with", Media: curtilagev1.Media_MEDIA_CLIP, Camera: "cam-b"})
+	if _, err := stream.Recv(); status.Code(err) != codes.NotFound {
+		t.Errorf("cam-b (unknown to frigate) -> %v", err)
+	}
+	// A camera the event never saw is refused before Frigate is asked.
+	stream, _ = c.GetMedia(ctx, &curtilagev1.GetMediaRequest{EventId: "with", Media: curtilagev1.Media_MEDIA_CLIP, Camera: "cam-zz"})
+	if _, err := stream.Recv(); status.Code(err) != codes.NotFound {
+		t.Errorf("foreign camera -> %v", err)
+	}
+	// A camera on a snapshot request is refused too.
+	stream, _ = c.GetMedia(ctx, &curtilagev1.GetMediaRequest{EventId: "with", Media: curtilagev1.Media_MEDIA_SNAPSHOT, Camera: "cam-a"})
+	if _, err := stream.Recv(); status.Code(err) != codes.NotFound {
+		t.Errorf("camera on snapshot -> %v", err)
+	}
+	// The camera-bound capability link serves that camera's view.
+	link, err := s.CameraLink(e, curtilagev1.Media_MEDIA_CLIP, "cam-a", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := httptest.NewServer(s.MediaHandler())
+	defer web.Close()
+	resp, err := http.Get(web.URL + link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(string(body), "mp4/api/cam-a/") {
+		t.Errorf("camera link -> %d %q", resp.StatusCode, body[:min(len(body), 40)])
+	}
+}
+
 func TestGetMediaWithoutFrigate(t *testing.T) {
 	c := client(t, &Server{Version: "test", Store: store.New(time.Hour)})
 	stream, _ := c.GetMedia(context.Background(), &curtilagev1.GetMediaRequest{EventId: "x", Media: curtilagev1.Media_MEDIA_SNAPSHOT})
