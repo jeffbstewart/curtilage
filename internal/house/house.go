@@ -142,7 +142,6 @@ type row struct {
 	Audience string
 	Clip     string
 	Thumb    string // media link path, or ""
-	ClipLink string // media link path for the clip, or ""
 	Live     bool
 	SourceID string
 	// What is the one sentence (policy.Describe); History is every
@@ -227,7 +226,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			audiences[policy.Audience(e.Kind)]++
 			verdicts[e.Kind.String()]++
-			if !all && !policy.Sent(e.Kind) {
+			// No zone, no interest: unzoned events are never shown,
+			// even in the everything view (the street's traffic).
+			if len(e.Zones) == 0 || (!all && !policy.Sent(e.Kind)) {
 				p.Hidden++
 				continue
 			}
@@ -291,16 +292,9 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 		end = now
 	}
 	rw.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
-	if h.API != nil && h.API.Keys != nil {
-		if e.HasSnapshot {
-			if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
-				rw.Thumb = link
-			}
-		}
-		// The recording-range clip exists for any event with a camera;
-		// while the event runs it grows on each fetch.
-		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_CLIP, now); err == nil {
-			rw.ClipLink = link
+	if e.HasSnapshot && h.API != nil && h.API.Keys != nil {
+		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
+			rw.Thumb = link
 		}
 	}
 	return rw
@@ -344,7 +338,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 </style>
 <h1>{{.DisplayName}}: the last {{.Hours}} hours</h1>
 <div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
-{{if .All}}Showing <b>everything</b>, including what was not sent. <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> not sent are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
+{{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
 <div class="sum">
  <div><b>By audience</b>{{range .ByAudience}}{{.Name}}: {{.N}}<br>{{end}}</div>
  <div><b>By verdict</b>{{range .ByVerdict}}{{.Name}}: {{.N}}<br>{{end}}</div>
@@ -357,7 +351,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b> <a class="mc" href="/house/event/{{.ID}}">[multi-camera view]</a>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
- <td>{{if .ClipLink}}<a href="{{.ClipLink}}">play</a> ({{.Clip}}){{else}}{{.Clip}}{{end}}</td>
+ <td>{{.Clip}}</td>
  <td>{{.Verdict}}</td>
  <td class="{{if eq .Audience "household"}}aud-household{{else}}aud-nobody{{end}}">{{.Audience}}</td>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
@@ -415,7 +409,7 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 	}
 	p.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
 	if !e.Running() {
-		p.Window = end.Add(5*time.Second).Sub(e.StartedAt.Add(-5*time.Second)).Seconds() // the clip's [start-5s, end+5s]
+		p.Window = end.Add(5 * time.Second).Sub(e.StartedAt.Add(-5 * time.Second)).Seconds() // the clip's [start-5s, end+5s]
 	}
 	if h.API != nil && h.API.Keys != nil {
 		for _, c := range cams {

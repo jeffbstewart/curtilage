@@ -31,6 +31,9 @@ func handler(t *testing.T) *Handler {
 			EndedAt: now.Add(-age).Add(time.Minute), HasSnapshot: snap, SourceID: "src-" + id, Zones: []string{"pad"}}
 	}
 	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: ev("det-new", policy.KindDetection, time.Hour, true)})
+	unzoned := ev("det-unzoned", policy.KindDetection, time.Hour, true)
+	unzoned.Zones = nil
+	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: unzoned})
 	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: ev("arr-new", policy.KindArrival, 2*time.Hour, true)})
 	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: ev("pkg-old", policy.KindPackage, 30*time.Hour, false)})
 	live := ev("live", policy.KindArrival, 5*time.Minute, true)
@@ -111,7 +114,7 @@ func TestPageViews(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	// Default: sent only. Window 24h: pkg-old (30h) is out.
-	for _, want := range []string{"4 events", "1 still running", "1</b> not sent are hidden", "src-arr-new", "src-live", "household: 3", "nobody (list only): 1", "/media/", `<span class="live">live</span>`,
+	for _, want := range []string{"5 events", "1 still running", "2</b> unsent or unzoned are hidden", "src-arr-new", "src-live", "household: 3", "nobody (list only): 2", "/media/", `<span class="live">live</span>`,
 		// The activity: its final sentence, then how it evolved, newest
 		// first, with the no-change revision folded away.
 		`<b><a class="ev" href="/house/event/walk">Person and a dog started on the porch, moved to the yard (3m0s)</a></b>`,
@@ -133,6 +136,10 @@ func TestPageViews(t *testing.T) {
 	_, body = get(t, h, "192.168.1.50:1", "", "?view=all")
 	if !strings.Contains(body, "src-det-new") || !strings.Contains(body, "Showing <b>everything</b>") {
 		t.Error("all view lacks the unsent detection")
+	}
+	// No zone, no interest: elided even from the everything view.
+	if strings.Contains(body, "src-det-unzoned") || !strings.Contains(body, "(1 unzoned hidden)") {
+		t.Error("unzoned event not elided from the all view")
 	}
 	_, body = get(t, h, "192.168.1.50:1", "", "?hours=48&view=all")
 	if !strings.Contains(body, "src-pkg-old") || !strings.Contains(body, "last 48 hours") {
@@ -159,7 +166,7 @@ func TestPageViews(t *testing.T) {
 	}
 	for _, want := range []string{"Person and a dog started on the porch", "porch-west", "porch-east", "<video", "const spans", "red outline",
 		`id="tabfollow" class="on"`, `id="tabgrid"`, `<body class="follow">`,
-		"const windowDur = 190;"} {
+		"const windowDur =  190 ;"} { // html/template's JS context pads the number
 		if !strings.Contains(body, want) {
 			t.Errorf("event page lacks %q", want)
 		}
