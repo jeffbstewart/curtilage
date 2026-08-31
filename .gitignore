@@ -35,3 +35,6 @@ go.work.sum
 /curtilage
 /curtilage.exe
 lifecycle/presubmit-personal-patterns.txt
+
+# Local reference screenshots, not for the public repo.
+exampleCars.png
