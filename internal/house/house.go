@@ -403,6 +403,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		if se.IsZero() {
 			se = end
 		}
+		if !se.After(clipStart) {
+			continue // over before the clip window opens: never the best camera
+		}
 		spans = append(spans, spanJSON{C: sp.Camera, S: sp.Start.Sub(clipStart).Seconds(), E: se.Sub(clipStart).Seconds()})
 	}
 	if b, err := json.Marshal(spans); err == nil {
