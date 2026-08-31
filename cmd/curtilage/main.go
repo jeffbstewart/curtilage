@@ -42,8 +42,12 @@ import (
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
-// version is set by the build (-ldflags "-X main.version=...").
-var version = "dev"
+// version and built are set by the build (Dockerfile ldflags):
+// version is the git commit, built the UTC build time.
+var (
+	version = "dev"
+	built   = "unknown"
+)
 
 func usage() {
 	fmt.Fprint(os.Stderr, `usage: curtilage <command> [flags]
@@ -258,7 +262,7 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		log.Printf("house page on /house/ for %v (trusted proxies %v)", cfg.GetHouse().GetAllowCidrs(), cfg.GetHouse().GetTrustedProxies())
 	}
 	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies,
-		DisplayName: cfg.DisplayName, Location: config.Location(cfg)})
+		DisplayName: cfg.DisplayName, Location: config.Location(cfg), Version: version, Built: built})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)
@@ -507,7 +511,7 @@ func rootPage(api *server.Server) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if err := rootTmpl.Execute(w, struct{ Name, Version string }{name, versionString()}); err != nil {
+		if err := rootTmpl.Execute(w, struct{ Name, Version, Built string }{name, versionString(), built}); err != nil {
 			log.Printf("root: render: %v", err)
 		}
 	}
@@ -525,7 +529,7 @@ var rootTmpl = template.Must(template.New("root").Parse(`<!doctype html>
  code { background: #eee; padding: 0 .3rem; border-radius: 3px; }
 </style>
 <h1>{{.Name}}</h1>
-<div class="v">{{.Version}} -- the camera-event policy engine</div>
+<div class="v">{{.Version}} (built {{.Built}}) -- the camera-event policy engine</div>
 <ul>
  <li><a href="/house/">The house page</a>: the last day of events with the engine's verdict and audience (<a href="/house/?view=all">everything</a>, including what was not sent). In the house only.</li>
  <li><a href="/metrics">Metrics</a> (Prometheus) and <a href="/healthz">health</a>.</li>

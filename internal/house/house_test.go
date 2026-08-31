@@ -52,6 +52,7 @@ func handler(t *testing.T) *Handler {
 	return &Handler{
 		Store: st, API: &server.Server{Store: st, Keys: kr, LinkTTL: time.Hour},
 		Allow: allow, Proxies: proxies, DisplayName: "test house", Now: func() time.Time { return now },
+		Version: strings.Repeat("ab12", 10), Built: "2026-08-31T01:00:00Z",
 	}
 }
 
@@ -116,7 +117,9 @@ func TestPageViews(t *testing.T) {
 		`<b><a class="ev" href="/house/event/walk">Person and a dog started on the porch, moved to the yard (3m0s)</a></b>`,
 		"<li>11:52:00  Person and a dog on the porch</li><li>11:50:00  Person on the porch</li>",
 		"porch-west, porch-east", "2 objects src-walk-1",
-		`<a href="/media/`} {
+		`<a href="/media/`,
+		// The build badge: shortened, linked, with the build time.
+		`commit/ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12">ab12ab12a</a> built 2026-08-31T01:00:00Z`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sent view lacks %q", want)
 		}
