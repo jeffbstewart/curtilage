@@ -326,8 +326,8 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  img { height: 64px; border-radius: 4px; display: block; }
  .live { color: #b00; font-weight: 600; }
  .aud-nobody { color: #888; }
- a.ev { color: inherit; text-decoration: none; }
- a.ev:hover { text-decoration: underline; }
+ a.ev { color: #06c; }
+ a.mc { font-size: .8rem; font-weight: 400; }
  .build { position: fixed; right: .6rem; bottom: .4rem; color: #aaa; font-size: .72rem; font-family: ui-monospace, monospace; background: #fafafacc; padding: 0 .3rem; border-radius: 3px; }
  .build a { color: #999; }
  .aud-household { color: #060; font-weight: 600; }
@@ -347,7 +347,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 {{range .Rows}}<tr>
  <td>{{.When}}{{if .Live}} <span class="live">live</span>{{end}}</td>
  <td class="z">{{.Camera}}</td>
- <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
+ <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b> <a class="mc" href="/house/event/{{.ID}}">[multi-camera view]</a>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
  <td>{{if .ClipLink}}<a href="{{.ClipLink}}">play</a> ({{.Clip}}){{else}}{{.Clip}}{{end}}</td>
@@ -491,10 +491,26 @@ const vids = panes.map(p => p.querySelector('video'));
 const seek = document.getElementById('seek'), play = document.getElementById('play'),
       clock = document.getElementById('clock');
 let scrubbing = false;
+// A span's tail lies: Frigate keeps a lost track alive ~3 s after the
+// person leaves frame, so trim it (never below a stub) before asking
+// who has them NOW.  Covering spans: the latest arrival wins.  Nobody
+// covering: jump AHEAD to the next span to start -- the person is
+// between cameras and this is where they will appear -- else stay
+// with whoever saw them last.
+const LAG = 2.5;
 function best(t) {
   let c = null, s = -1;
-  for (const sp of spans) if (sp.s <= t && t <= sp.e && sp.s > s) { c = sp.c; s = sp.s; }
-  return c;
+  for (const sp of spans) {
+    const e = Math.max(sp.e - LAG, sp.s + 0.7);
+    if (sp.s <= t && t <= e && sp.s > s) { c = sp.c; s = sp.s; }
+  }
+  if (c) return c;
+  let up = null, us = Infinity;
+  for (const sp of spans) if (sp.s > t && sp.s < us) { up = sp.c; us = sp.s; }
+  if (up) return up;
+  let last = null, le = -1;
+  for (const sp of spans) if (sp.e <= t + LAG && sp.e > le) { last = sp.c; le = sp.e; }
+  return last;
 }
 function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
 function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
