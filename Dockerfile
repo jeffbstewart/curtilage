@@ -5,12 +5,13 @@
 FROM golang:1.26@sha256:dc2521c2a906db43073b8b4d99f491b6341cf15610b6ebbab187c45153f9959e AS build
 ENV GOFLAGS=-mod=readonly
 ARG VERSION=dev
+ARG PRNUM=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath \
-    -ldflags="-s -w -X main.version=${VERSION} -X main.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.prnum=${PRNUM} -X main.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     -o /curtilage ./cmd/curtilage
 
 FROM scratch

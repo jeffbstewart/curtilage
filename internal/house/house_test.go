@@ -52,7 +52,7 @@ func handler(t *testing.T) *Handler {
 	return &Handler{
 		Store: st, API: &server.Server{Store: st, Keys: kr, LinkTTL: time.Hour},
 		Allow: allow, Proxies: proxies, DisplayName: "test house", Now: func() time.Time { return now },
-		Version: strings.Repeat("ab12", 10), Built: "2026-08-31T01:00:00Z",
+		Version: strings.Repeat("ab12", 10), PR: "20", Built: "2026-08-31T01:00:00Z",
 	}
 }
 
@@ -120,7 +120,7 @@ func TestPageViews(t *testing.T) {
 		`<a href="/media/`,
 		`[multi-camera view]`,
 		// The build badge: shortened, linked, with the build time.
-		`commit/ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12">ab12ab12a</a> built 2026-08-31T01:00:00Z`} {
+		`<a href="https://github.com/jeffbstewart/curtilage/pull/20">PR #20</a> <a href="https://github.com/jeffbstewart/curtilage/commit/ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12">ab12ab12a</a> built 2026-08-31T01:00:00Z`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sent view lacks %q", want)
 		}

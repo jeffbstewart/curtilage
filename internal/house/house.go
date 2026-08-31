@@ -39,10 +39,11 @@ type Handler struct {
 	// Location is the household's time zone (config timezone); nil
 	// means UTC.  Nobody wants to do time zone math on this page.
 	Location *time.Location
-	// Version (the git commit the binary was built from) and Built
-	// (UTC build time): the corner badge that ends "which build am I
-	// looking at?" for good.
-	Version, Built string
+	// Version (the git commit the binary was built from), PR (the
+	// pull request that merged it, "" when none) and Built (UTC build
+	// time): the corner badge that ends "which build am I looking
+	// at?" for good.
+	Version, PR, Built string
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
 }
@@ -58,6 +59,8 @@ func (h *Handler) loc() *time.Location {
 type buildBadge struct {
 	Short string // the commit, shortened for reading
 	URL   string // the commit on the forge, when Short is a commit
+	PR    string // the pull request number, "" when none
+	PRURL string
 	Built string
 }
 
@@ -66,6 +69,10 @@ func (h *Handler) badge() buildBadge {
 	if len(h.Version) == 40 { // a full git sha: shorten and link it
 		b.Short = h.Version[:9]
 		b.URL = "https://github.com/jeffbstewart/curtilage/commit/" + h.Version
+	}
+	if h.PR != "" {
+		b.PR = h.PR
+		b.PRURL = "https://github.com/jeffbstewart/curtilage/pull/" + h.PR
 	}
 	return b
 }
@@ -356,7 +363,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
 </tr>
 {{end}}</table>
-<div class="build">curtilage {{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
+<div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 `))
 
 // event serves /house/event/<id>: the one thing that happened, with
@@ -483,7 +490,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 {{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video autoplay preload="auto" muted playsinline src="{{.Src}}"></video></div>
 {{end}}</div>
 {{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}
-<div class="build">curtilage {{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
+<div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 <script>
 const spans = {{.SpansJSON}};
 const panes = [...document.querySelectorAll('.pane')];
