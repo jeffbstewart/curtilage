@@ -277,6 +277,10 @@ const (
 	Media_MEDIA_UNKNOWN Media = 0
 	// The still image of the object, with its bounding box: JPEG.
 	Media_MEDIA_SNAPSHOT Media = 1
+	// Video of the event from its leading camera, MP4, cut from the
+	// continuous recordings: [start - 5s, end + 5s], with end = now
+	// while the event is still running -- ask again, get more.
+	Media_MEDIA_CLIP Media = 2
 )
 
 // Enum value maps for Media.
@@ -284,10 +288,12 @@ var (
 	Media_name = map[int32]string{
 		0: "MEDIA_UNKNOWN",
 		1: "MEDIA_SNAPSHOT",
+		2: "MEDIA_CLIP",
 	}
 	Media_value = map[string]int32{
 		"MEDIA_UNKNOWN":  0,
 		"MEDIA_SNAPSHOT": 1,
+		"MEDIA_CLIP":     2,
 	}
 )
 
@@ -1388,10 +1394,12 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x14EVENT_CHANGE_UNKNOWN\x10\x00\x12\x18\n" +
 	"\x14EVENT_CHANGE_STARTED\x10\x01\x12\x18\n" +
 	"\x14EVENT_CHANGE_UPDATED\x10\x02\x12\x16\n" +
-	"\x12EVENT_CHANGE_ENDED\x10\x03*.\n" +
+	"\x12EVENT_CHANGE_ENDED\x10\x03*>\n" +
 	"\x05Media\x12\x11\n" +
 	"\rMEDIA_UNKNOWN\x10\x00\x12\x12\n" +
-	"\x0eMEDIA_SNAPSHOT\x10\x012\xb4\x03\n" +
+	"\x0eMEDIA_SNAPSHOT\x10\x01\x12\x0e\n" +
+	"\n" +
+	"MEDIA_CLIP\x10\x022\xb4\x03\n" +
 	"\x10CurtilageService\x12X\n" +
 	"\rGetServerInfo\x12\".curtilage.v1.GetServerInfoRequest\x1a#.curtilage.v1.GetServerInfoResponse\x12R\n" +
 	"\vListCameras\x12 .curtilage.v1.ListCamerasRequest\x1a!.curtilage.v1.ListCamerasResponse\x12O\n" +

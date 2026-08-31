@@ -115,7 +115,8 @@ func TestPageViews(t *testing.T) {
 		// first, with the no-change revision folded away.
 		"<b>Person and a dog started on the porch, moved to the yard (3m0s)</b>",
 		"<li>11:52:00  Person and a dog on the porch</li><li>11:50:00  Person on the porch</li>",
-		"porch-west, porch-east", "2 objects src-walk-1"} {
+		"porch-west, porch-east", "2 objects src-walk-1",
+		`<a href="/media/`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sent view lacks %q", want)
 		}
