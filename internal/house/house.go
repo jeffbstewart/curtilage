@@ -142,7 +142,6 @@ type row struct {
 	Audience string
 	Clip     string
 	Thumb    string // media link path, or ""
-	ClipLink string // media link path for the clip, or ""
 	Live     bool
 	SourceID string
 	// What is the one sentence (policy.Describe); History is every
@@ -227,7 +226,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			audiences[policy.Audience(e.Kind)]++
 			verdicts[e.Kind.String()]++
-			if !all && !policy.Sent(e.Kind) {
+			// No zone, no interest: unzoned events are never shown,
+			// even in the everything view (the street's traffic).
+			if len(e.Zones) == 0 || (!all && !policy.Sent(e.Kind)) {
 				p.Hidden++
 				continue
 			}
@@ -291,16 +292,9 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 		end = now
 	}
 	rw.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
-	if h.API != nil && h.API.Keys != nil {
-		if e.HasSnapshot {
-			if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
-				rw.Thumb = link
-			}
-		}
-		// The recording-range clip exists for any event with a camera;
-		// while the event runs it grows on each fetch.
-		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_CLIP, now); err == nil {
-			rw.ClipLink = link
+	if e.HasSnapshot && h.API != nil && h.API.Keys != nil {
+		if link, err := h.API.Link(e, curtilagev1.Media_MEDIA_SNAPSHOT, now); err == nil {
+			rw.Thumb = link
 		}
 	}
 	return rw
@@ -344,7 +338,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 </style>
 <h1>{{.DisplayName}}: the last {{.Hours}} hours</h1>
 <div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
-{{if .All}}Showing <b>everything</b>, including what was not sent. <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> not sent are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
+{{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
 <div class="sum">
  <div><b>By audience</b>{{range .ByAudience}}{{.Name}}: {{.N}}<br>{{end}}</div>
  <div><b>By verdict</b>{{range .ByVerdict}}{{.Name}}: {{.N}}<br>{{end}}</div>
@@ -357,7 +351,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b> <a class="mc" href="/house/event/{{.ID}}">[multi-camera view]</a>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
- <td>{{if .ClipLink}}<a href="{{.ClipLink}}">play</a> ({{.Clip}}){{else}}{{.Clip}}{{end}}</td>
+ <td>{{.Clip}}</td>
  <td>{{.Verdict}}</td>
  <td class="{{if eq .Audience "household"}}aud-household{{else}}aud-nobody{{end}}">{{.Audience}}</td>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
@@ -397,6 +391,11 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		History                           []string
 		SpansJSON                         template.JS
 		Badge                             buildBadge
+		// Window is the clip window in seconds (duration plus both
+		// margins) once the event has ended: the authoritative
+		// timeline length.  0 while live -- the timeline then grows
+		// as the clips do.
+		Window float64
 	}{
 		Badge:       h.badge(),
 		DisplayName: h.DisplayName,
@@ -409,6 +408,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		end = now
 	}
 	p.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
+	if !e.Running() {
+		p.Window = end.Add(5 * time.Second).Sub(e.StartedAt.Add(-5 * time.Second)).Seconds() // the clip's [start-5s, end+5s]
+	}
 	if h.API != nil && h.API.Keys != nil {
 		for _, c := range cams {
 			if link, err := h.API.CameraLink(e, curtilagev1.Media_MEDIA_CLIP, c, now); err == nil {
@@ -489,10 +491,11 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  body.follow .pane.show { flex: 1 1 100%; order: -1; }
  body.follow .pane.big { grid-column: auto; }
 </style>
+<body class="follow">
 <h1>{{.What}}</h1>
 <div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where the follow tab would look right now; in follow, click a thumbnail to pin it. <a href="/house/">back to the house</a></div>
 <div class="bar">
- <span class="tabs"><button id="tabgrid" class="on">grid</button><button id="tabfollow">follow</button></span>
+ <span class="tabs"><button id="tabgrid">grid</button><button id="tabfollow" class="on">follow</button></span>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
@@ -504,6 +507,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 <div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 <script>
 const spans = {{.SpansJSON}};
+const windowDur = {{.Window}}; // authoritative once ended; 0 while live
 const panes = [...document.querySelectorAll('.pane')];
 const vids = panes.map(p => p.querySelector('video'));
 const seek = document.getElementById('seek'), play = document.getElementById('play'),
@@ -532,7 +536,10 @@ function best(t) {
   for (const sp of spans) if (sp.e <= t + LAG && sp.e > le) { last = sp.c; le = sp.e; }
   return last;
 }
-function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
+function dur() {
+  if (windowDur > 0) return windowDur; // the server knows the window: no jumping timeline
+  return Math.max(...vids.map(v => v.duration || 0), 1);
+}
 function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
 // The master clock is the furthest-ahead video: robust against any
 // one pane loading slowly or being throttled.
