@@ -496,6 +496,16 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		}
 		spans = append(spans, spanJSON{C: sp.Camera, S: sp.Start.Sub(clipStart).Seconds(), E: se.Sub(clipStart).Seconds()})
 	}
+	// An event without sighting spans (an arrival, a state change, a
+	// sighting -- everything but an activity) covers its whole window
+	// on every camera it names.  Without this, follow mode -- the
+	// default tab -- has no covering span, never promotes a big pane,
+	// and the page is a filmstrip of thumbnails with no star.
+	if len(spans) == 0 {
+		for _, c := range cams {
+			spans = append(spans, spanJSON{C: c, S: 0, E: end.Add(5 * time.Second).Sub(clipStart).Seconds()})
+		}
+	}
 	p.SpansJSON = template.JS("[]")
 	if b, err := json.Marshal(spans); err == nil {
 		p.SpansJSON = template.JS(b)
