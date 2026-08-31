@@ -85,7 +85,7 @@ func TestOneListenerServesGRPCAndHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &curtilagev1.Config{Listen: lis.Addr().String(), DisplayName: "house"}
-	srv, gs := httpServer(cfg, store.New(time.Hour), nil, nil, nil)
+	srv, gs := httpServer(cfg, store.New(time.Hour), nil, nil, nil, nil)
 	go srv.Serve(lis)
 	t.Cleanup(func() { shutdown(srv, gs) })
 

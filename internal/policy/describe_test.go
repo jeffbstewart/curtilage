@@ -27,6 +27,10 @@ func TestDescribeActivity(t *testing.T) {
 		{act(map[string]int{"person": 1}, nil, 0), "Person seen"},
 		{act(map[string]int{"person": 1}, []string{"driveway", "yard", "porch"}, 57*time.Second), "Person started in the driveway, moved to the yard, then the porch (57s)"},
 		{Event{Kind: KindDetection, Label: "car", SubLabel: "blue minivan", Zones: []string{"side_parking"}}, "Car (blue minivan) in side_parking"},
+		{Event{Kind: KindArrival, Label: "car", Zones: []string{"side_parking"}, Objects: map[string]int{"car": 1}}, "A car arrived in the side parking"},
+		{Event{Kind: KindArrival, Label: "car", Zones: []string{"side_parking"}, Objects: map[string]int{"car": 2}}, "A car arrived in the side parking (2 present)"},
+		{Event{Kind: KindDeparture, Label: "car", Zones: []string{"right_parking_space"}, Objects: map[string]int{"car": 0}}, "A car left the right parking space (empty now)"},
+		{Event{Kind: KindDeparture, Label: "car", Zones: []string{"side_parking"}, Objects: map[string]int{"car": 1}}, "A car left the side parking (1 remains)"},
 		{Event{Kind: KindDetection, Label: "car"}, "Car"},
 	}
 	for _, c := range cases {

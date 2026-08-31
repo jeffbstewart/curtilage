@@ -42,3 +42,10 @@ house {
 
 # Every time a person reads (the house page) is shown in this zone.
 timezone: "America/New_York"
+
+# Occupancy: what is parked where.  Arrivals and departures become
+# events; the count is shown on the house page.  Labels default to
+# car; the timers to 60s (arrive) and 5m (depart).
+occupancy { zone: "side_parking" }
+occupancy { zone: "left_parking_space" }
+occupancy { zone: "right_parking_space" }

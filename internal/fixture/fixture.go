@@ -56,6 +56,21 @@ const (
 // 2026-08-30T19:05:00Z .. 19:12:00Z of curtilage-20260830T190448Z.
 const WalkSolo = "walk-solo-20260830T1906.mcap"
 
+// RedCar is the red car leaving the garage (2026-08-30 22:20 UTC:
+// its 6.5-hour right_parking_space track ends, a 2-minute maneuver
+// track follows, a driveway transit at 22:21:42) and parking behind
+// the minivan on the side lot -- where, with the polygons of that
+// day, it never registered in side_parking (only unzoned blips on
+// driveway-corner): the occlusion case the occupancy ledger's
+// departure grace exists for.  Window 22:05-22:45 UTC.
+const RedCar = "redcar-20260830T2205.mcap"
+
+// SideArrival is the same morning's side-lot arrival (11:30 UTC): a
+// car takes side_parking, seen by BOTH driveway-corner and
+// driveway-winchester at once -- one car, two cameras, so a correct
+// count is max-per-camera, not a sum.  Window 10:55-11:45 UTC.
+const SideArrival = "sidearrival-20260830T1055.mcap"
+
 // Path is the on-disk path of a fixture.
 func Path(t testing.TB, name string) string {
 	t.Helper()

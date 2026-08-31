@@ -105,6 +105,23 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	if _, err := time.LoadLocation(cfg.Timezone); err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
+	for i, o := range cfg.Occupancy {
+		if o.GetZone() == "" {
+			return fmt.Errorf("occupancy[%d]: zone is required", i)
+		}
+		if len(o.Labels) == 0 {
+			o.Labels = []string{"car"}
+		}
+		if o.ArriveAfter == nil {
+			o.ArriveAfter = durationpb.New(time.Minute)
+		}
+		if o.DepartAfter == nil {
+			o.DepartAfter = durationpb.New(5 * time.Minute)
+		}
+		if a, d := o.ArriveAfter.AsDuration(), o.DepartAfter.AsDuration(); a < time.Second || d < time.Second || a > time.Hour || d > 24*time.Hour {
+			return fmt.Errorf("occupancy[%d] %s: timers out of range", i, o.GetZone())
+		}
+	}
 	if _, err := ParseCIDRs(cfg.GetHouse().GetAllowCidrs()); err != nil {
 		return fmt.Errorf("house.allow_cidrs: %w", err)
 	}
