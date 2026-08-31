@@ -158,7 +158,8 @@ func TestPageViews(t *testing.T) {
 		t.Fatalf("event page -> %d", code)
 	}
 	for _, want := range []string{"Person and a dog started on the porch", "porch-west", "porch-east", "<video", "const spans", "red outline",
-		`id="tabgrid" class="on"`, `id="tabfollow"`} {
+		`id="tabfollow" class="on"`, `id="tabgrid"`, `<body class="follow">`,
+		"const windowDur = 190;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("event page lacks %q", want)
 		}

@@ -397,6 +397,11 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		History                           []string
 		SpansJSON                         template.JS
 		Badge                             buildBadge
+		// Window is the clip window in seconds (duration plus both
+		// margins) once the event has ended: the authoritative
+		// timeline length.  0 while live -- the timeline then grows
+		// as the clips do.
+		Window float64
 	}{
 		Badge:       h.badge(),
 		DisplayName: h.DisplayName,
@@ -409,6 +414,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		end = now
 	}
 	p.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
+	if !e.Running() {
+		p.Window = end.Add(5*time.Second).Sub(e.StartedAt.Add(-5*time.Second)).Seconds() // the clip's [start-5s, end+5s]
+	}
 	if h.API != nil && h.API.Keys != nil {
 		for _, c := range cams {
 			if link, err := h.API.CameraLink(e, curtilagev1.Media_MEDIA_CLIP, c, now); err == nil {
@@ -489,10 +497,11 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  body.follow .pane.show { flex: 1 1 100%; order: -1; }
  body.follow .pane.big { grid-column: auto; }
 </style>
+<body class="follow">
 <h1>{{.What}}</h1>
 <div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where the follow tab would look right now; in follow, click a thumbnail to pin it. <a href="/house/">back to the house</a></div>
 <div class="bar">
- <span class="tabs"><button id="tabgrid" class="on">grid</button><button id="tabfollow">follow</button></span>
+ <span class="tabs"><button id="tabgrid">grid</button><button id="tabfollow" class="on">follow</button></span>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
@@ -504,6 +513,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 <div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 <script>
 const spans = {{.SpansJSON}};
+const windowDur = {{.Window}}; // authoritative once ended; 0 while live
 const panes = [...document.querySelectorAll('.pane')];
 const vids = panes.map(p => p.querySelector('video'));
 const seek = document.getElementById('seek'), play = document.getElementById('play'),
@@ -532,7 +542,10 @@ function best(t) {
   for (const sp of spans) if (sp.e <= t + LAG && sp.e > le) { last = sp.c; le = sp.e; }
   return last;
 }
-function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
+function dur() {
+  if (windowDur > 0) return windowDur; // the server knows the window: no jumping timeline
+  return Math.max(...vids.map(v => v.duration || 0), 1);
+}
 function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
 // The master clock is the furthest-ahead video: robust against any
 // one pane loading slowly or being throttled.
