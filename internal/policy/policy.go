@@ -30,6 +30,9 @@ const (
 	// KindActivity is people (and dogs) moving about: many Frigate
 	// objects across cameras folded into one event (incidents.go).
 	KindActivity
+	// KindState is a believed change of a watched classifier state, or
+	// an alarm about one enduring too long (states.go).
+	KindState
 )
 
 // ClipState is whether there is a clip and whether it is done.
@@ -92,7 +95,7 @@ func (e Event) Running() bool { return e.EndedAt.IsZero() }
 // "Policy").
 func Audience(k Kind) string {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage, KindActivity:
+	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState:
 		return "household"
 	case KindDetection:
 		return "nobody (list only)"
@@ -103,7 +106,7 @@ func Audience(k Kind) string {
 // Sent reports whether an event of this kind goes to anyone.
 func Sent(k Kind) bool {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage, KindActivity:
+	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState:
 		return true
 	}
 	return false
@@ -122,6 +125,8 @@ func (k Kind) String() string {
 		return "detection"
 	case KindActivity:
 		return "activity"
+	case KindState:
+		return "state"
 	}
 	return "unknown"
 }

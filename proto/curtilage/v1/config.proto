@@ -31,6 +31,30 @@ message Config {
   // Zones whose occupancy the household cares about (parked cars
   // today; anything Frigate learns to see tomorrow).
   repeated Occupancy occupancy = 9;
+  // State classifiers the policy engine believes -- after a hold.
+  repeated StateModel state_models = 10;
+}
+
+// One watched state classifier
+// (frigate/<camera>/classification/<model>, payload = current class).
+// The sensors are twitchy -- a landscaper in a yellow shirt has faked
+// both a car's presence (35 s) and the bins' absence (4 minutes) --
+// so a raw change must HOLD for `hold` before it is believed; only
+// believed changes are ever acted on.
+message StateModel {
+  // Model name as it appears in the topic, e.g. "bmw_garage_door".
+  string model = 1;
+  // How long a new class must persist before it is believed; 10m if
+  // unset.  Doors want ~20s (real opens can last under a minute);
+  // presence and bins want 10-15m (their lies have lasted 4).
+  google.protobuf.Duration hold = 2;
+  // Believed changes become household events when true; otherwise
+  // the state is tracked and shown but never announced.
+  bool news = 3;
+  // Alarm when the believed state has been `alarm_class` for
+  // `alarm_after` (a door left open an hour).  Both or neither.
+  string alarm_class = 4;
+  google.protobuf.Duration alarm_after = 5;
 }
 
 // One occupancy watch: how many <labels> are in <zone>, with

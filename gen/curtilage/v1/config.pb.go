@@ -48,7 +48,9 @@ type Config struct {
 	Timezone string `protobuf:"bytes,8,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	// Zones whose occupancy the household cares about (parked cars
 	// today; anything Frigate learns to see tomorrow).
-	Occupancy     []*Occupancy `protobuf:"bytes,9,rep,name=occupancy,proto3" json:"occupancy,omitempty"`
+	Occupancy []*Occupancy `protobuf:"bytes,9,rep,name=occupancy,proto3" json:"occupancy,omitempty"`
+	// State classifiers the policy engine believes -- after a hold.
+	StateModels   []*StateModel `protobuf:"bytes,10,rep,name=state_models,json=stateModels,proto3" json:"state_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -146,6 +148,103 @@ func (x *Config) GetOccupancy() []*Occupancy {
 	return nil
 }
 
+func (x *Config) GetStateModels() []*StateModel {
+	if x != nil {
+		return x.StateModels
+	}
+	return nil
+}
+
+// One watched state classifier
+// (frigate/<camera>/classification/<model>, payload = current class).
+// The sensors are twitchy -- a landscaper in a yellow shirt has faked
+// both a car's presence (35 s) and the bins' absence (4 minutes) --
+// so a raw change must HOLD for `hold` before it is believed; only
+// believed changes are ever acted on.
+type StateModel struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Model name as it appears in the topic, e.g. "bmw_garage_door".
+	Model string `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	// How long a new class must persist before it is believed; 10m if
+	// unset.  Doors want ~20s (real opens can last under a minute);
+	// presence and bins want 10-15m (their lies have lasted 4).
+	Hold *durationpb.Duration `protobuf:"bytes,2,opt,name=hold,proto3" json:"hold,omitempty"`
+	// Believed changes become household events when true; otherwise
+	// the state is tracked and shown but never announced.
+	News bool `protobuf:"varint,3,opt,name=news,proto3" json:"news,omitempty"`
+	// Alarm when the believed state has been `alarm_class` for
+	// `alarm_after` (a door left open an hour).  Both or neither.
+	AlarmClass    string               `protobuf:"bytes,4,opt,name=alarm_class,json=alarmClass,proto3" json:"alarm_class,omitempty"`
+	AlarmAfter    *durationpb.Duration `protobuf:"bytes,5,opt,name=alarm_after,json=alarmAfter,proto3" json:"alarm_after,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StateModel) Reset() {
+	*x = StateModel{}
+	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StateModel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StateModel) ProtoMessage() {}
+
+func (x *StateModel) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StateModel.ProtoReflect.Descriptor instead.
+func (*StateModel) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *StateModel) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *StateModel) GetHold() *durationpb.Duration {
+	if x != nil {
+		return x.Hold
+	}
+	return nil
+}
+
+func (x *StateModel) GetNews() bool {
+	if x != nil {
+		return x.News
+	}
+	return false
+}
+
+func (x *StateModel) GetAlarmClass() string {
+	if x != nil {
+		return x.AlarmClass
+	}
+	return ""
+}
+
+func (x *StateModel) GetAlarmAfter() *durationpb.Duration {
+	if x != nil {
+		return x.AlarmAfter
+	}
+	return nil
+}
+
 // One occupancy watch: how many <labels> are in <zone>, with
 // arrivals and departures as events and the count as presence.
 // Frigate publishes no per-zone counts on our install, so the ledger
@@ -171,7 +270,7 @@ type Occupancy struct {
 
 func (x *Occupancy) Reset() {
 	*x = Occupancy{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	mi := &file_curtilage_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -183,7 +282,7 @@ func (x *Occupancy) String() string {
 func (*Occupancy) ProtoMessage() {}
 
 func (x *Occupancy) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[1]
+	mi := &file_curtilage_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -196,7 +295,7 @@ func (x *Occupancy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Occupancy.ProtoReflect.Descriptor instead.
 func (*Occupancy) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Occupancy) GetZone() string {
@@ -246,7 +345,7 @@ type House struct {
 
 func (x *House) Reset() {
 	*x = House{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[2]
+	mi := &file_curtilage_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -258,7 +357,7 @@ func (x *House) String() string {
 func (*House) ProtoMessage() {}
 
 func (x *House) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[2]
+	mi := &file_curtilage_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -271,7 +370,7 @@ func (x *House) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use House.ProtoReflect.Descriptor instead.
 func (*House) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *House) GetAllowCidrs() []string {
@@ -299,7 +398,7 @@ type Frigate struct {
 
 func (x *Frigate) Reset() {
 	*x = Frigate{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[3]
+	mi := &file_curtilage_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +410,7 @@ func (x *Frigate) String() string {
 func (*Frigate) ProtoMessage() {}
 
 func (x *Frigate) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[3]
+	mi := &file_curtilage_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +423,7 @@ func (x *Frigate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Frigate.ProtoReflect.Descriptor instead.
 func (*Frigate) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Frigate) GetUrl() string {
@@ -351,7 +450,7 @@ type Links struct {
 
 func (x *Links) Reset() {
 	*x = Links{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[4]
+	mi := &file_curtilage_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -363,7 +462,7 @@ func (x *Links) String() string {
 func (*Links) ProtoMessage() {}
 
 func (x *Links) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[4]
+	mi := &file_curtilage_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -376,7 +475,7 @@ func (x *Links) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Links.ProtoReflect.Descriptor instead.
 func (*Links) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Links) GetTtl() *durationpb.Duration {
@@ -407,7 +506,7 @@ type Mqtt struct {
 
 func (x *Mqtt) Reset() {
 	*x = Mqtt{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[5]
+	mi := &file_curtilage_v1_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -419,7 +518,7 @@ func (x *Mqtt) String() string {
 func (*Mqtt) ProtoMessage() {}
 
 func (x *Mqtt) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[5]
+	mi := &file_curtilage_v1_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +531,7 @@ func (x *Mqtt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Mqtt.ProtoReflect.Descriptor instead.
 func (*Mqtt) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{5}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Mqtt) GetHost() string {
@@ -495,7 +594,7 @@ type Recording struct {
 
 func (x *Recording) Reset() {
 	*x = Recording{}
-	mi := &file_curtilage_v1_config_proto_msgTypes[6]
+	mi := &file_curtilage_v1_config_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +606,7 @@ func (x *Recording) String() string {
 func (*Recording) ProtoMessage() {}
 
 func (x *Recording) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_config_proto_msgTypes[6]
+	mi := &file_curtilage_v1_config_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +619,7 @@ func (x *Recording) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recording.ProtoReflect.Descriptor instead.
 func (*Recording) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{6}
+	return file_curtilage_v1_config_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Recording) GetDir() string {
@@ -548,7 +647,7 @@ var File_curtilage_v1_config_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xfc\x02\n" +
+	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xb9\x03\n" +
 	"\x06Config\x12&\n" +
 	"\x04mqtt\x18\x01 \x01(\v2\x12.curtilage.v1.MqttR\x04mqtt\x125\n" +
 	"\trecording\x18\x02 \x01(\v2\x17.curtilage.v1.RecordingR\trecording\x12\x16\n" +
@@ -558,7 +657,18 @@ const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\x05links\x18\x06 \x01(\v2\x13.curtilage.v1.LinksR\x05links\x12)\n" +
 	"\x05house\x18\a \x01(\v2\x13.curtilage.v1.HouseR\x05house\x12\x1a\n" +
 	"\btimezone\x18\b \x01(\tR\btimezone\x125\n" +
-	"\toccupancy\x18\t \x03(\v2\x17.curtilage.v1.OccupancyR\toccupancy\"\xb3\x01\n" +
+	"\toccupancy\x18\t \x03(\v2\x17.curtilage.v1.OccupancyR\toccupancy\x12;\n" +
+	"\fstate_models\x18\n" +
+	" \x03(\v2\x18.curtilage.v1.StateModelR\vstateModels\"\xc2\x01\n" +
+	"\n" +
+	"StateModel\x12\x14\n" +
+	"\x05model\x18\x01 \x01(\tR\x05model\x12-\n" +
+	"\x04hold\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x04hold\x12\x12\n" +
+	"\x04news\x18\x03 \x01(\bR\x04news\x12\x1f\n" +
+	"\valarm_class\x18\x04 \x01(\tR\n" +
+	"alarmClass\x12:\n" +
+	"\valarm_after\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\n" +
+	"alarmAfter\"\xb3\x01\n" +
 	"\tOccupancy\x12\x12\n" +
 	"\x04zone\x18\x01 \x01(\tR\x04zone\x12\x16\n" +
 	"\x06labels\x18\x02 \x03(\tR\x06labels\x12<\n" +
@@ -597,35 +707,39 @@ func file_curtilage_v1_config_proto_rawDescGZIP() []byte {
 	return file_curtilage_v1_config_proto_rawDescData
 }
 
-var file_curtilage_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_curtilage_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_curtilage_v1_config_proto_goTypes = []any{
 	(*Config)(nil),              // 0: curtilage.v1.Config
-	(*Occupancy)(nil),           // 1: curtilage.v1.Occupancy
-	(*House)(nil),               // 2: curtilage.v1.House
-	(*Frigate)(nil),             // 3: curtilage.v1.Frigate
-	(*Links)(nil),               // 4: curtilage.v1.Links
-	(*Mqtt)(nil),                // 5: curtilage.v1.Mqtt
-	(*Recording)(nil),           // 6: curtilage.v1.Recording
-	(*durationpb.Duration)(nil), // 7: google.protobuf.Duration
+	(*StateModel)(nil),          // 1: curtilage.v1.StateModel
+	(*Occupancy)(nil),           // 2: curtilage.v1.Occupancy
+	(*House)(nil),               // 3: curtilage.v1.House
+	(*Frigate)(nil),             // 4: curtilage.v1.Frigate
+	(*Links)(nil),               // 5: curtilage.v1.Links
+	(*Mqtt)(nil),                // 6: curtilage.v1.Mqtt
+	(*Recording)(nil),           // 7: curtilage.v1.Recording
+	(*durationpb.Duration)(nil), // 8: google.protobuf.Duration
 }
 var file_curtilage_v1_config_proto_depIdxs = []int32{
-	5,  // 0: curtilage.v1.Config.mqtt:type_name -> curtilage.v1.Mqtt
-	6,  // 1: curtilage.v1.Config.recording:type_name -> curtilage.v1.Recording
-	3,  // 2: curtilage.v1.Config.frigate:type_name -> curtilage.v1.Frigate
-	4,  // 3: curtilage.v1.Config.links:type_name -> curtilage.v1.Links
-	2,  // 4: curtilage.v1.Config.house:type_name -> curtilage.v1.House
-	1,  // 5: curtilage.v1.Config.occupancy:type_name -> curtilage.v1.Occupancy
-	7,  // 6: curtilage.v1.Occupancy.arrive_after:type_name -> google.protobuf.Duration
-	7,  // 7: curtilage.v1.Occupancy.depart_after:type_name -> google.protobuf.Duration
-	7,  // 8: curtilage.v1.Links.ttl:type_name -> google.protobuf.Duration
-	7,  // 9: curtilage.v1.Mqtt.keepalive:type_name -> google.protobuf.Duration
-	7,  // 10: curtilage.v1.Recording.rotate_every:type_name -> google.protobuf.Duration
-	7,  // 11: curtilage.v1.Recording.retention:type_name -> google.protobuf.Duration
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	6,  // 0: curtilage.v1.Config.mqtt:type_name -> curtilage.v1.Mqtt
+	7,  // 1: curtilage.v1.Config.recording:type_name -> curtilage.v1.Recording
+	4,  // 2: curtilage.v1.Config.frigate:type_name -> curtilage.v1.Frigate
+	5,  // 3: curtilage.v1.Config.links:type_name -> curtilage.v1.Links
+	3,  // 4: curtilage.v1.Config.house:type_name -> curtilage.v1.House
+	2,  // 5: curtilage.v1.Config.occupancy:type_name -> curtilage.v1.Occupancy
+	1,  // 6: curtilage.v1.Config.state_models:type_name -> curtilage.v1.StateModel
+	8,  // 7: curtilage.v1.StateModel.hold:type_name -> google.protobuf.Duration
+	8,  // 8: curtilage.v1.StateModel.alarm_after:type_name -> google.protobuf.Duration
+	8,  // 9: curtilage.v1.Occupancy.arrive_after:type_name -> google.protobuf.Duration
+	8,  // 10: curtilage.v1.Occupancy.depart_after:type_name -> google.protobuf.Duration
+	8,  // 11: curtilage.v1.Links.ttl:type_name -> google.protobuf.Duration
+	8,  // 12: curtilage.v1.Mqtt.keepalive:type_name -> google.protobuf.Duration
+	8,  // 13: curtilage.v1.Recording.rotate_every:type_name -> google.protobuf.Duration
+	8,  // 14: curtilage.v1.Recording.retention:type_name -> google.protobuf.Duration
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_config_proto_init() }
@@ -639,7 +753,7 @@ func file_curtilage_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_curtilage_v1_config_proto_rawDesc), len(file_curtilage_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

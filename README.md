@@ -36,8 +36,12 @@ and a dog started on the porch, moved to the yard, then the driveway
 (1m25s)".  Configured `occupancy` zones keep a parked-object ledger
 (counts from tracked objects, max across cameras, arrival dwell and
 departure grace): arrivals and departures become events, and the
-house page shows what is parked where now.  The rest passes through
-as detections.
+house page shows what is parked where now.  Configured `state_models`
+believe Frigate's state classifiers slowly (per-model hold, so a
+35-second false "car present" or a 4-minute false "bins gone" never
+surfaces); believed changes can be news, an enduring state can alarm
+(a door open an hour), and the page shows the believed state with any
+unproven raw value beside it.  The rest passes through as detections.
 `GET /house/` is the in-the-house page -- the last day of events with
 the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,

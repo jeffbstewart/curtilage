@@ -138,9 +138,15 @@ func cmdRun(args []string) error {
 			ArriveAfter: oc.GetArriveAfter().AsDuration(), DepartAfter: oc.GetDepartAfter().AsDuration()})
 	}
 	occ := policy.NewOccupancy(watches)
-	eng := policy.Multi{policy.NewIncidents(policy.DefaultIncidentConfig()), occ}
+	var stateModels []policy.StateModel
+	for _, sm := range cfg.StateModels {
+		stateModels = append(stateModels, policy.StateModel{Model: sm.GetModel(), Hold: sm.GetHold().AsDuration(),
+			News: sm.GetNews(), AlarmClass: sm.GetAlarmClass(), AlarmAfter: sm.GetAlarmAfter().AsDuration()})
+	}
+	states := policy.NewStates(stateModels)
+	eng := policy.Multi{policy.NewIncidents(policy.DefaultIncidentConfig()), occ, states}
 	if *replay != "" {
-		return runReplay(ctx, cfg, st, eng, occ, fc, kr, *replay, *speed)
+		return runReplay(ctx, cfg, st, eng, occ, states, fc, kr, *replay, *speed)
 	}
 
 	// The store is a view of the recordings: rebuild it from them
@@ -186,7 +192,7 @@ func cmdRun(args []string) error {
 		}
 	}()
 
-	srv, gs := httpServer(cfg, st, rotator, occ, fc, kr)
+	srv, gs := httpServer(cfg, st, rotator, occ, states, fc, kr)
 	go serve(srv, cfg.Listen)
 	go pruneHourly(ctx, st, dir)
 
@@ -217,7 +223,7 @@ func cmdRun(args []string) error {
 // against real traffic with no broker and no house.  Records are fed
 // at their original pace divided by speed, then the server stays up
 // until interrupted.
-func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, eng policy.Engine, occ *policy.Occupancy, fc *frigate.Client, kr *captoken.Keyring, path string, speed float64) error {
+func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, eng policy.Engine, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring, path string, speed float64) error {
 	recs, err := record.ReadAll(ctx, path)
 	if err != nil && !errors.Is(err, record.ErrTruncated) && !errors.Is(err, record.ErrCorrupt) {
 		return err
@@ -225,7 +231,7 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 	if err != nil {
 		log.Printf("replay: %v", err)
 	}
-	srv, gs := httpServer(cfg, st, nil, occ, fc, kr)
+	srv, gs := httpServer(cfg, st, nil, occ, states, fc, kr)
 	go serve(srv, cfg.Listen)
 	log.Printf("replaying %d records from %s at %gx", len(recs), path, speed)
 	var prev time.Time
@@ -259,7 +265,7 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 // httpServer is the one listener: gRPC (h2c) for the API, plain HTTP
 // for /metrics, /healthz and /admin.  MediaManager's pattern: one
 // port, the reverse proxy in front.
-func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, fc *frigate.Client, kr *captoken.Keyring) (*http.Server, *grpc.Server) {
+func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring) (*http.Server, *grpc.Server) {
 	gs := grpc.NewServer()
 	api := &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st,
 		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration()}
@@ -273,7 +279,7 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 	}
 	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies,
 		DisplayName: cfg.DisplayName, Location: config.Location(cfg), Version: version, PR: prnum, Built: built,
-		Occupancy: occ})
+		Occupancy: occ, States: states})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)

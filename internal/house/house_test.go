@@ -53,11 +53,15 @@ func handler(t *testing.T) *Handler {
 	act.EndedAt = now.Add(-7 * time.Minute)
 	st.Apply(now.Add(-7*time.Minute), policy.Change{Op: policy.OpEnded, Event: act})
 	occ := policy.NewOccupancy([]policy.Watch{{Zone: "side_parking"}})
+	sts := policy.NewStates([]policy.StateModel{{Model: "bmw_garage_door", Hold: 20 * time.Second}})
+	sts.Observe(now.Add(-2*time.Hour), "frigate/garage/classification/bmw_garage_door", []byte("gmw_garage_door_closed"))
+	sts.Observe(now.Add(-time.Minute), "frigate/garage/classification/bmw_garage_door", []byte("bmw_garage_door_open"))
+	sts.Observe(now.Add(-30*time.Second), "frigate/garage/status/detect", []byte("ON")) // believed after the hold
 	return &Handler{
 		Store: st, API: &server.Server{Store: st, Keys: kr, LinkTTL: time.Hour},
 		Allow: allow, Proxies: proxies, DisplayName: "test house", Now: func() time.Time { return now },
 		Version: strings.Repeat("ab12", 10), PR: "20", Built: "2026-08-31T01:00:00Z",
-		Occupancy: occ,
+		Occupancy: occ, States: sts,
 	}
 }
 
@@ -124,6 +128,7 @@ func TestPageViews(t *testing.T) {
 		"porch-west, porch-east", "2 objects src-walk-1",
 		`<a href="/media/`,
 		`[multi-camera view]`,
+		"<b>State</b>bmw garage door: open since Sun 11:59", // handler renders UTC here
 		// The build badge: shortened, linked, with the build time.
 		`<a href="https://github.com/jeffbstewart/curtilage/pull/20">PR #20</a> <a href="https://github.com/jeffbstewart/curtilage/commit/ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12">ab12ab12a</a> built 2026-08-31T01:00:00Z`} {
 		if !strings.Contains(body, want) {

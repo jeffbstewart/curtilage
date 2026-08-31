@@ -14,14 +14,24 @@ record, this is the wish list.  Date each entry.
   approval queue for devices that fail or predate it.  No secrets in
   the app binary, ever.
 
-## Waiting on Frigate+ (a model that knows our objects)
+## Landed sooner than expected
 
-- **Garage door state** (2026-08-31).  Open or shut, from the garage
-  camera via a Frigate state classifier (tilt sensors were tried and
-  disappointed).  The left/right_garage_door zones only see objects
-  crossing them, not the door itself.  When the classifier exists its
-  present/absent topic feeds the policy engine like the package
-  classifier the design already plans for.
+The state classifiers arrived 2026-08-31 without Frigate+: locally
+trained models publishing frigate/<camera>/classification/<model>
+with the current class as payload.  Doors, per-car presence and
+bins_at_curb are live; policy/states.go holds their twitch out of
+the believed state.  What remains of the old entries:
+
+- **Scheduled assertions** (the bins).  Sunday 19:00: bins not out ->
+  act (missed collections have happened; preventing a recurrence has
+  very high WAF).  Monday 19:00: bins still out -> act.  Reads the
+  HELD bins state, which the hold makes landscaper-proof.
+- **MQTT out to Home Assistant** (design phase 2): publish the held
+  states retained under curtilage/#.  First consumer: a "house
+  occupied" bit composed in HA from car presence plus
+  are-the-iphones-on-the-WiFi.
+- **Semi-supervised improvement**: flag false positives/negatives
+  back into the classifiers' training libraries as they occur.
 
 - **Trash and recycling cans** (2026-08-30).  The cans go out Sunday
   night and come in Monday night.  Two scheduled checks, each worth an

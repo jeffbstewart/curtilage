@@ -108,6 +108,11 @@ enum EventKind {
   // across cameras, one thing that happened.  objects, path and
   // cameras describe it; they grow while it is running.
   EVENT_KIND_ACTIVITY = 5;
+  // A believed change of a watched state (a garage door, a car's
+  // presence, the bins), or an alarm about one enduring too long --
+  // then started_at..ended_at is how long it has endured.  label is
+  // the model, sub_label the class.
+  EVENT_KIND_STATE = 6;
 }
 
 // How many of a label an activity involved, e.g. {person, 2}.

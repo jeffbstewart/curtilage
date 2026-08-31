@@ -18,6 +18,14 @@ import (
 //	2 persons and a dog started on the porch, moved to the yard, then the driveway (1m25s)
 func Describe(e Event) string {
 	switch e.Kind {
+	case KindState:
+		// Label is the model, SubLabel the class; a transition is
+		// instantaneous, an alarm has endured started..ended.
+		s := strings.ReplaceAll(e.Label, "_", " ") + ": " + Humanize(e.Label, e.SubLabel)
+		if d := e.EndedAt.Sub(e.StartedAt); d > 0 {
+			s += " for " + d.Round(time.Minute).String()
+		}
+		return capitalize(s)
 	case KindArrival, KindDeparture:
 		zone := ""
 		if len(e.Zones) > 0 {

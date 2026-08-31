@@ -71,6 +71,22 @@ const RedCar = "redcar-20260830T2205.mcap"
 // count is max-per-camera, not a sum.  Window 10:55-11:45 UTC.
 const SideArrival = "sidearrival-20260830T1055.mcap"
 
+// ClassifiersLunch and ClassifiersLandscapers are the state
+// classifiers' first real day (2026-08-31, classification topics +
+// garage heartbeats for clock ticks).  Lunch (13:45-15:11 UTC): the
+// household leaves -- bmw_garage_door open 13:53:04, closed 13:54:24,
+// bmw_ix_not_present 13:53:49 -- and returns an hour later in
+// reverse; every transition is real.  Landscapers (15:11-15:25, fed
+// AFTER lunch into the same engine): yellow-shirted landscapers walk
+// the scene and two models lie at once -- sienna_2020_present for
+// 35 s, bins_not_at_curb for ~4 minutes (its false start is in the
+// lunch window at 15:10:15) -- and every one of those transitions
+// must be held out of the believed state.
+const (
+	ClassifiersLunch       = "classifiers-lunch-20260831T1345.mcap"
+	ClassifiersLandscapers = "classifiers-landscapers-20260831T1511.mcap"
+)
+
 // Path is the on-disk path of a fixture.
 func Path(t testing.TB, name string) string {
 	t.Helper()
