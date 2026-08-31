@@ -118,6 +118,7 @@ func TestPageViews(t *testing.T) {
 		"<li>11:52:00  Person and a dog on the porch</li><li>11:50:00  Person on the porch</li>",
 		"porch-west, porch-east", "2 objects src-walk-1",
 		`<a href="/media/`,
+		`[multi-camera view]`,
 		// The build badge: shortened, linked, with the build time.
 		`commit/ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12">ab12ab12a</a> built 2026-08-31T01:00:00Z`} {
 		if !strings.Contains(body, want) {
