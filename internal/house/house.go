@@ -39,6 +39,10 @@ type Handler struct {
 	// Location is the household's time zone (config timezone); nil
 	// means UTC.  Nobody wants to do time zone math on this page.
 	Location *time.Location
+	// Version (the git commit the binary was built from) and Built
+	// (UTC build time): the corner badge that ends "which build am I
+	// looking at?" for good.
+	Version, Built string
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
 }
@@ -48,6 +52,22 @@ func (h *Handler) loc() *time.Location {
 		return time.UTC
 	}
 	return h.Location
+}
+
+// buildBadge is the corner note saying which build this is.
+type buildBadge struct {
+	Short string // the commit, shortened for reading
+	URL   string // the commit on the forge, when Short is a commit
+	Built string
+}
+
+func (h *Handler) badge() buildBadge {
+	b := buildBadge{Short: h.Version, Built: h.Built}
+	if len(h.Version) == 40 { // a full git sha: shorten and link it
+		b.Short = h.Version[:9]
+		b.URL = "https://github.com/jeffbstewart/curtilage/commit/" + h.Version
+	}
+	return b
 }
 
 // DefaultWindow is how far back the page looks unless asked (?hours=).
@@ -138,6 +158,7 @@ type page struct {
 	Live        int
 	ByAudience  []count
 	ByVerdict   []count
+	Badge       buildBadge
 }
 
 type count struct {
@@ -176,7 +197,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	all := r.URL.Query().Get("view") == "all"
 
 	p := page{DisplayName: h.DisplayName, Hours: int(window / time.Hour), All: all,
-		Since: since.In(h.loc()).Format(time.RFC1123), Now: now.In(h.loc()).Format(time.RFC1123), Zone: h.loc().String()}
+		Since: since.In(h.loc()).Format(time.RFC1123), Now: now.In(h.loc()).Format(time.RFC1123), Zone: h.loc().String(),
+		Badge: h.badge()}
 	audiences, verdicts := map[string]int{}, map[string]int{}
 	token := ""
 	for {
@@ -306,6 +328,8 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  .aud-nobody { color: #888; }
  a.ev { color: inherit; text-decoration: none; }
  a.ev:hover { text-decoration: underline; }
+ .build { position: fixed; right: .6rem; bottom: .4rem; color: #aaa; font-size: .72rem; font-family: ui-monospace, monospace; background: #fafafacc; padding: 0 .3rem; border-radius: 3px; }
+ .build a { color: #999; }
  .aud-household { color: #060; font-weight: 600; }
  .src { color: #999; font-size: .75rem; font-family: ui-monospace, monospace; }
  ul.hist { margin: .2rem 0 0 1rem; padding: 0; color: #666; font-size: .85rem; }
@@ -332,6 +356,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
 </tr>
 {{end}}</table>
+<div class="build">curtilage {{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 `))
 
 // event serves /house/event/<id>: the one thing that happened, with
@@ -364,7 +389,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		Panes                             []pane
 		History                           []string
 		SpansJSON                         template.JS
+		Badge                             buildBadge
 	}{
+		Badge:       h.badge(),
 		DisplayName: h.DisplayName,
 		What:        policy.Describe(e),
 		When:        e.StartedAt.In(h.loc()).Format("Mon Jan 2 15:04:05"),
@@ -442,6 +469,8 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  .pane video { width: 100%; display: block; }
  ul.hist { color: #666; }
  a { color: #06c; }
+ .build { position: fixed; right: .6rem; bottom: .4rem; color: #aaa; font-size: .72rem; font-family: ui-monospace, monospace; background: #fafafacc; padding: 0 .3rem; border-radius: 3px; }
+ .build a { color: #999; }
 </style>
 <h1>{{.What}}</h1>
 <div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where a follow-the-action view would look right now -- a preview that shows exactly where it is wrong. <a href="/house/">back to the house</a></div>
@@ -454,6 +483,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 {{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video autoplay preload="auto" muted playsinline src="{{.Src}}"></video></div>
 {{end}}</div>
 {{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}
+<div class="build">curtilage {{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 <script>
 const spans = {{.SpansJSON}};
 const panes = [...document.querySelectorAll('.pane')];
