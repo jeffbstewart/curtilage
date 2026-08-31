@@ -113,6 +113,10 @@ enum EventKind {
   // then started_at..ended_at is how long it has endured.  label is
   // the model, sub_label the class.
   EVENT_KIND_STATE = 6;
+  // A notable label seen ANYWHERE (config notable_labels): rare
+  // enough that any sighting is household news, zone or no zone (a
+  // bear).  One event per camera track; sightings are not folded.
+  EVENT_KIND_SIGHTING = 7;
 }
 
 // How many of a label an activity involved, e.g. {person, 2}.

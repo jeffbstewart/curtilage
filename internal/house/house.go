@@ -241,9 +241,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			audiences[policy.Audience(e.Kind)]++
 			verdicts[e.Kind.String()]++
-			// No zone, no interest: unzoned events are never shown,
-			// even in the everything view (the street's traffic).
-			if len(e.Zones) == 0 || (!all && !policy.Sent(e.Kind)) {
+			// No zone, no interest -- for DETECTIONS: an unzoned one is
+			// the street's traffic, hidden even from the everything
+			// view.  Kinds the policy engine already vouched for
+			// (sightings, states) are news wherever they happened.
+			if (e.Kind == policy.KindDetection && len(e.Zones) == 0) || (!all && !policy.Sent(e.Kind)) {
 				p.Hidden++
 				continue
 			}

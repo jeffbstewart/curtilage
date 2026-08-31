@@ -52,6 +52,10 @@ func handler(t *testing.T) *Handler {
 	act.Path, act.Zones = []string{"porch", "yard"}, []string{"porch", "yard"}
 	act.EndedAt = now.Add(-7 * time.Minute)
 	st.Apply(now.Add(-7*time.Minute), policy.Change{Op: policy.OpEnded, Event: act})
+	// A sighting: no zone at all, still household news.
+	bear := policy.Event{ID: "bear", Camera: "backyard-gate", Label: "bear", Kind: policy.KindSighting,
+		StartedAt: now.Add(-20 * time.Minute), EndedAt: now.Add(-19 * time.Minute), HasSnapshot: true, SourceID: "src-bear"}
+	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: bear})
 	occ := policy.NewOccupancy([]policy.Watch{{Zone: "side_parking"}})
 	sts := policy.NewStates([]policy.StateModel{{Model: "bmw_garage_door", Hold: 20 * time.Second}})
 	sts.Observe(now.Add(-2*time.Hour), "frigate/garage/classification/bmw_garage_door", []byte("gmw_garage_door_closed"))
@@ -120,7 +124,9 @@ func TestPageViews(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	// Default: sent only. Window 24h: pkg-old (30h) is out.
-	for _, want := range []string{"5 events", "1 still running", "2</b> unsent or unzoned are hidden", "src-arr-new", "src-live", "household: 3", "nobody (list only): 2", "/media/", `<span class="live">live</span>`,
+	for _, want := range []string{"6 events", "1 still running", "2</b> unsent or unzoned are hidden", "src-arr-new", "src-live", "household: 4", "nobody (list only): 2", "/media/", `<span class="live">live</span>`,
+		// The unzoned bear: a sighting is shown, zone or no zone.
+		"src-bear", "A bear sighted (backyard-gate)",
 		// The activity: its final sentence, then how it evolved, newest
 		// first, with the no-change revision folded away.
 		`<b><a class="ev" href="/house/event/walk">Person and a dog started on the porch, moved to the yard (3m0s)</a></b>`,

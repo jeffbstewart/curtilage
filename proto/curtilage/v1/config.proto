@@ -33,6 +33,10 @@ message Config {
   repeated Occupancy occupancy = 9;
   // State classifiers the policy engine believes -- after a hold.
   repeated StateModel state_models = 10;
+  // Labels that are news ANYWHERE, zoned or not: every sighting is a
+  // household event (a bear on any camera).  The zone rules exist to
+  // mute the street's routine traffic; these labels have no routine.
+  repeated string notable_labels = 11;
 }
 
 // One watched state classifier

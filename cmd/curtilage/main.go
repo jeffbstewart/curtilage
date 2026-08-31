@@ -144,7 +144,10 @@ func cmdRun(args []string) error {
 			News: sm.GetNews(), AlarmClass: sm.GetAlarmClass(), AlarmAfter: sm.GetAlarmAfter().AsDuration()})
 	}
 	states := policy.NewStates(stateModels)
-	eng := policy.Multi{policy.NewIncidents(policy.DefaultIncidentConfig()), occ, states}
+	// Notable labels (a bear) are news on any camera, zone or not.
+	ic := policy.DefaultIncidentConfig()
+	ic.Notable = cfg.GetNotableLabels()
+	eng := policy.Multi{policy.NewIncidents(ic), occ, states}
 	if *replay != "" {
 		return runReplay(ctx, cfg, st, eng, occ, states, fc, kr, *replay, *speed)
 	}

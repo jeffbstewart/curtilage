@@ -168,6 +168,8 @@ func kindToProto(k policy.Kind) curtilagev1.EventKind {
 		return curtilagev1.EventKind_EVENT_KIND_ACTIVITY
 	case policy.KindState:
 		return curtilagev1.EventKind_EVENT_KIND_STATE
+	case policy.KindSighting:
+		return curtilagev1.EventKind_EVENT_KIND_SIGHTING
 	}
 	return curtilagev1.EventKind_EVENT_KIND_UNKNOWN
 }

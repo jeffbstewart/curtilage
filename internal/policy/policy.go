@@ -33,6 +33,10 @@ const (
 	// KindState is a believed change of a watched classifier state, or
 	// an alarm about one enduring too long (states.go).
 	KindState
+	// KindSighting is a notable label seen anywhere (config
+	// notable_labels): rare enough that any sighting is household
+	// news, zone or no zone (a bear).  One event per camera track.
+	KindSighting
 )
 
 // ClipState is whether there is a clip and whether it is done.
@@ -95,7 +99,7 @@ func (e Event) Running() bool { return e.EndedAt.IsZero() }
 // "Policy").
 func Audience(k Kind) string {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState:
+	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState, KindSighting:
 		return "household"
 	case KindDetection:
 		return "nobody (list only)"
@@ -106,7 +110,7 @@ func Audience(k Kind) string {
 // Sent reports whether an event of this kind goes to anyone.
 func Sent(k Kind) bool {
 	switch k {
-	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState:
+	case KindArrival, KindDeparture, KindPackage, KindActivity, KindState, KindSighting:
 		return true
 	}
 	return false
@@ -127,6 +131,8 @@ func (k Kind) String() string {
 		return "activity"
 	case KindState:
 		return "state"
+	case KindSighting:
+		return "sighting"
 	}
 	return "unknown"
 }
@@ -178,13 +184,16 @@ func MintID(sourceID string) string {
 // Frigate reports (that it did not itself call a false positive) is a
 // detection from its first message to its end.
 type Passthrough struct {
-	live map[string]Event // by source id
+	live    map[string]Event // by source id
+	notable map[string]bool  // labels whose sightings are news anywhere
 	// Undecodable counts what Observe could not parse, for /metrics.
 	Undecodable uint64
 }
 
 // NewPassthrough returns an empty engine.
-func NewPassthrough() *Passthrough { return &Passthrough{live: map[string]Event{}} }
+func NewPassthrough() *Passthrough {
+	return &Passthrough{live: map[string]Event{}, notable: map[string]bool{}}
+}
 
 // Live is a snapshot of the events still running, in no order.
 func (p *Passthrough) Live() []Event {
@@ -210,6 +219,9 @@ func (p *Passthrough) Observe(at time.Time, topic string, payload []byte) []Chan
 		return nil
 	}
 	next := fromObject(obj, at)
+	if p.notable[obj.Label] {
+		next.Kind = KindSighting // news anywhere: the zone rules do not apply
+	}
 	prev, known := p.live[obj.ID]
 	var changes []Change
 	switch msg.Type {

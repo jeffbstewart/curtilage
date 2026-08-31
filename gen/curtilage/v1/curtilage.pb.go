@@ -112,6 +112,10 @@ const (
 	// then started_at..ended_at is how long it has endured.  label is
 	// the model, sub_label the class.
 	EventKind_EVENT_KIND_STATE EventKind = 6
+	// A notable label seen ANYWHERE (config notable_labels): rare
+	// enough that any sighting is household news, zone or no zone (a
+	// bear).  One event per camera track; sightings are not folded.
+	EventKind_EVENT_KIND_SIGHTING EventKind = 7
 )
 
 // Enum value maps for EventKind.
@@ -124,6 +128,7 @@ var (
 		4: "EVENT_KIND_DETECTION",
 		5: "EVENT_KIND_ACTIVITY",
 		6: "EVENT_KIND_STATE",
+		7: "EVENT_KIND_SIGHTING",
 	}
 	EventKind_value = map[string]int32{
 		"EVENT_KIND_UNKNOWN":   0,
@@ -133,6 +138,7 @@ var (
 		"EVENT_KIND_DETECTION": 4,
 		"EVENT_KIND_ACTIVITY":  5,
 		"EVENT_KIND_STATE":     6,
+		"EVENT_KIND_SIGHTING":  7,
 	}
 )
 
@@ -1487,7 +1493,7 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x04size\x18\x02 \x01(\x04R\x04size*2\n" +
 	"\bPlatform\x12\x14\n" +
 	"\x10PLATFORM_UNKNOWN\x10\x00\x12\x10\n" +
-	"\fPLATFORM_IOS\x10\x01*\xb6\x01\n" +
+	"\fPLATFORM_IOS\x10\x01*\xcf\x01\n" +
 	"\tEventKind\x12\x16\n" +
 	"\x12EVENT_KIND_UNKNOWN\x10\x00\x12\x16\n" +
 	"\x12EVENT_KIND_ARRIVAL\x10\x01\x12\x18\n" +
@@ -1495,7 +1501,8 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x12EVENT_KIND_PACKAGE\x10\x03\x12\x18\n" +
 	"\x14EVENT_KIND_DETECTION\x10\x04\x12\x17\n" +
 	"\x13EVENT_KIND_ACTIVITY\x10\x05\x12\x14\n" +
-	"\x10EVENT_KIND_STATE\x10\x06*f\n" +
+	"\x10EVENT_KIND_STATE\x10\x06\x12\x17\n" +
+	"\x13EVENT_KIND_SIGHTING\x10\a*f\n" +
 	"\tClipState\x12\x16\n" +
 	"\x12CLIP_STATE_UNKNOWN\x10\x00\x12\x13\n" +
 	"\x0fCLIP_STATE_NONE\x10\x01\x12\x16\n" +

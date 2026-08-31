@@ -18,6 +18,16 @@ import (
 //	2 persons and a dog started on the porch, moved to the yard, then the driveway (1m25s)
 func Describe(e Event) string {
 	switch e.Kind {
+	case KindSighting:
+		// Rare enough that the sighting itself is the news; without a
+		// zone the camera says where.
+		s := "a " + e.Label + " sighted"
+		if len(e.Zones) > 0 {
+			s += " " + at(e.Zones[0])
+		} else if e.Camera != "" {
+			s += " (" + e.Camera + ")"
+		}
+		return capitalize(s)
 	case KindState:
 		// Label is the model, SubLabel the class; a transition is
 		// instantaneous, an alarm has endured started..ended.

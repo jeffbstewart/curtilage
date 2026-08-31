@@ -50,7 +50,11 @@ type Config struct {
 	// today; anything Frigate learns to see tomorrow).
 	Occupancy []*Occupancy `protobuf:"bytes,9,rep,name=occupancy,proto3" json:"occupancy,omitempty"`
 	// State classifiers the policy engine believes -- after a hold.
-	StateModels   []*StateModel `protobuf:"bytes,10,rep,name=state_models,json=stateModels,proto3" json:"state_models,omitempty"`
+	StateModels []*StateModel `protobuf:"bytes,10,rep,name=state_models,json=stateModels,proto3" json:"state_models,omitempty"`
+	// Labels that are news ANYWHERE, zoned or not: every sighting is a
+	// household event (a bear on any camera).  The zone rules exist to
+	// mute the street's routine traffic; these labels have no routine.
+	NotableLabels []string `protobuf:"bytes,11,rep,name=notable_labels,json=notableLabels,proto3" json:"notable_labels,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,6 +155,13 @@ func (x *Config) GetOccupancy() []*Occupancy {
 func (x *Config) GetStateModels() []*StateModel {
 	if x != nil {
 		return x.StateModels
+	}
+	return nil
+}
+
+func (x *Config) GetNotableLabels() []string {
+	if x != nil {
+		return x.NotableLabels
 	}
 	return nil
 }
@@ -647,7 +658,7 @@ var File_curtilage_v1_config_proto protoreflect.FileDescriptor
 
 const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xb9\x03\n" +
+	"\x19curtilage/v1/config.proto\x12\fcurtilage.v1\x1a\x1egoogle/protobuf/duration.proto\"\xe0\x03\n" +
 	"\x06Config\x12&\n" +
 	"\x04mqtt\x18\x01 \x01(\v2\x12.curtilage.v1.MqttR\x04mqtt\x125\n" +
 	"\trecording\x18\x02 \x01(\v2\x17.curtilage.v1.RecordingR\trecording\x12\x16\n" +
@@ -659,7 +670,8 @@ const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\btimezone\x18\b \x01(\tR\btimezone\x125\n" +
 	"\toccupancy\x18\t \x03(\v2\x17.curtilage.v1.OccupancyR\toccupancy\x12;\n" +
 	"\fstate_models\x18\n" +
-	" \x03(\v2\x18.curtilage.v1.StateModelR\vstateModels\"\xc2\x01\n" +
+	" \x03(\v2\x18.curtilage.v1.StateModelR\vstateModels\x12%\n" +
+	"\x0enotable_labels\x18\v \x03(\tR\rnotableLabels\"\xc2\x01\n" +
 	"\n" +
 	"StateModel\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12-\n" +
