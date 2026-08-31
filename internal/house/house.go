@@ -47,6 +47,9 @@ type Handler struct {
 	// Occupancy, when set, renders the presence strip: what is parked
 	// where, right now.
 	Occupancy *policy.Occupancy
+	// States, when set, renders the believed classifier states, with
+	// any still-unproven raw value shown honestly beside them.
+	States *policy.States
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
 }
@@ -169,8 +172,10 @@ type page struct {
 	ByVerdict   []count
 	Badge       buildBadge
 	// Presence is the occupancy strip: one line per watched
-	// (zone, label) ledger.
-	Presence []presenceLine
+	// (zone, label) ledger.  StateLines are the believed classifier
+	// states.
+	Presence   []presenceLine
+	StateLines []presenceLine
 }
 
 type presenceLine struct {
@@ -263,6 +268,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					zs.Since.In(h.loc()).Format("Mon 15:04"), zs.LastSeen.In(h.loc()).Format("Mon 15:04"))
 			}
 			p.Presence = append(p.Presence, line)
+		}
+	}
+	if h.States != nil {
+		for _, m := range h.States.Snapshot() {
+			line := presenceLine{Zone: strings.ReplaceAll(m.Model, "_", " ")}
+			switch {
+			case m.Held == "":
+				line.State = "no verdict yet"
+			default:
+				line.State = policy.Humanize(m.Model, m.Held) + " since " + m.HeldSince.In(h.loc()).Format("Mon 15:04")
+				if m.Raw != m.Held {
+					line.State += " (unproven: " + policy.Humanize(m.Model, m.Raw) + " since " + m.RawSince.In(h.loc()).Format("15:04") + ")"
+				}
+			}
+			p.StateLines = append(p.StateLines, line)
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -366,6 +386,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 {{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
 <div class="sum">
  {{if .Presence}}<div><b>Parked</b>{{range .Presence}}{{.Zone}}: {{.State}}<br>{{end}}</div>{{end}}
+ {{if .StateLines}}<div><b>State</b>{{range .StateLines}}{{.Zone}}: {{.State}}<br>{{end}}</div>{{end}}
  <div><b>By audience</b>{{range .ByAudience}}{{.Name}}: {{.N}}<br>{{end}}</div>
  <div><b>By verdict</b>{{range .ByVerdict}}{{.Name}}: {{.N}}<br>{{end}}</div>
 </div>

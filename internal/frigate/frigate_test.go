@@ -10,20 +10,24 @@ import (
 
 func TestParseTopic(t *testing.T) {
 	cases := map[string]Topic{
-		"frigate/events":                    {Kind: KindEvents},
-		"frigate/reviews":                   {Kind: KindReviews},
-		"frigate/available":                 {Kind: KindAvailable},
-		"frigate/porch-east/car":            {Kind: KindCount, Camera: "porch-east", Label: "car"},
-		"frigate/porch-east/all":            {Kind: KindCount, Camera: "porch-east", Label: "all"},
-		"frigate/driveway-corner/pad/car":   {Kind: KindCount, Camera: "driveway-corner", Zone: "pad", Label: "car"},
-		"frigate/porch-east/all/active":     {},
-		"frigate/porch-east/car/snapshot":   {},
-		"frigate/porch-east/motion":         {},
-		"frigate/porch-east/status/detect":  {},
-		"frigate/stats":                     {},
-		"frigate/porch-east/classification": {},
-		"zigbee2mqtt/porch_light":           {},
-		"frigate":                           {},
+		"frigate/events":                                          {Kind: KindEvents},
+		"frigate/reviews":                                         {Kind: KindReviews},
+		"frigate/available":                                       {Kind: KindAvailable},
+		"frigate/porch-east/car":                                  {Kind: KindCount, Camera: "porch-east", Label: "car"},
+		"frigate/porch-east/all":                                  {Kind: KindCount, Camera: "porch-east", Label: "all"},
+		"frigate/driveway-corner/pad/car":                         {Kind: KindCount, Camera: "driveway-corner", Zone: "pad", Label: "car"},
+		"frigate/porch-east/all/active":                           {},
+		"frigate/porch-east/car/snapshot":                         {},
+		"frigate/garage/classification/bmw_garage_door":           {Kind: KindClassification, Camera: "garage", Model: "bmw_garage_door"},
+		"frigate/driveway-winchester/classification/bins_at_curb": {Kind: KindClassification, Camera: "driveway-winchester", Model: "bins_at_curb"},
+		"frigate/garage/classification/Sienna 2025":               {Kind: KindClassification, Camera: "garage", Model: "Sienna 2025"},
+		"frigate/garage/classification/too/deep":                  {},
+		"frigate/porch-east/motion":                               {},
+		"frigate/porch-east/status/detect":                        {},
+		"frigate/stats":                                           {},
+		"frigate/porch-east/classification":                       {},
+		"zigbee2mqtt/porch_light":                                 {},
+		"frigate":                                                 {},
 	}
 	for topic, want := range cases {
 		if got := ParseTopic(topic); got != want {

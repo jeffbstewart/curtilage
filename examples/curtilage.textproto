@@ -49,3 +49,16 @@ timezone: "America/New_York"
 occupancy { zone: "side_parking" }
 occupancy { zone: "left_parking_space" }
 occupancy { zone: "right_parking_space" }
+
+# State classifiers, believed slowly: a raw change must hold before
+# it counts (the sensors lie for seconds-to-minutes at a time).
+# news: believed changes become events.  A door open an hour alarms.
+state_models {
+  model: "bmw_garage_door"
+  hold { seconds: 20 }
+  news: true
+  alarm_class: "bmw_garage_door_open"
+  alarm_after { seconds: 3600 }
+}
+state_models { model: "bmw_ix_presence" }        # hold 10m, quiet: feeds state only
+state_models { model: "bins_at_curb" hold { seconds: 900 } }

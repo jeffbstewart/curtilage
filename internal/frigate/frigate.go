@@ -38,15 +38,20 @@ const (
 	KindCount
 	// KindAvailable is frigate/available: "online" / "offline".
 	KindAvailable
+	// KindClassification is frigate/<camera>/classification/<model>:
+	// a state classifier's verdict, the payload being the current
+	// class name, published on change.
+	KindClassification
 )
 
 // Topic is a classified topic name.  Camera, Zone and Label are set
-// for KindCount only.
+// for KindCount; Camera and Model for KindClassification.
 type Topic struct {
 	Kind   Kind
 	Camera string
 	Zone   string
 	Label  string
+	Model  string
 }
 
 // Sub-topics under frigate/<camera>/ that look like counts by shape
@@ -74,6 +79,8 @@ func ParseTopic(topic string) Topic {
 		return Topic{Kind: KindReviews}
 	case len(parts) == 2 && parts[1] == "available":
 		return Topic{Kind: KindAvailable}
+	case len(parts) == 4 && parts[2] == "classification":
+		return Topic{Kind: KindClassification, Camera: parts[1], Model: parts[3]}
 	case len(parts) == 3 && !notCounts[parts[2]]:
 		return Topic{Kind: KindCount, Camera: parts[1], Label: parts[2]}
 	case len(parts) == 4 && !notCounts[parts[2]] && !notCounts[parts[3]]:
@@ -223,6 +230,23 @@ func ParseReview(payload []byte) (*Review, error) {
 		return nil, fmt.Errorf("%w: frigate/reviews without after.id", ErrShape)
 	}
 	return &r, nil
+}
+
+// ParseClass decodes a classification topic's payload: the current
+// class name, a short printable token.
+func ParseClass(payload []byte) (string, error) {
+	s := strings.TrimSpace(string(payload))
+	if s == "" || len(s) > 128 {
+		return "", fmt.Errorf("%w: class %q", ErrShape, payload)
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-', r == ' ':
+		default:
+			return "", fmt.Errorf("%w: class %q", ErrShape, payload)
+		}
+	}
+	return s, nil
 }
 
 // ParseCount decodes a count topic's payload: a bare non-negative

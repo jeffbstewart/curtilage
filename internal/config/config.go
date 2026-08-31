@@ -105,6 +105,24 @@ func applyDefaults(cfg *curtilagev1.Config) error {
 	if _, err := time.LoadLocation(cfg.Timezone); err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
+	for i, sm := range cfg.StateModels {
+		if sm.GetModel() == "" {
+			return fmt.Errorf("state_models[%d]: model is required", i)
+		}
+		if sm.Hold == nil {
+			sm.Hold = durationpb.New(10 * time.Minute)
+		} else if d := sm.Hold.AsDuration(); d < time.Second || d > time.Hour {
+			return fmt.Errorf("state_models[%d] %s: hold %v out of range (1s..1h)", i, sm.GetModel(), d)
+		}
+		if (sm.GetAlarmClass() == "") != (sm.AlarmAfter == nil) {
+			return fmt.Errorf("state_models[%d] %s: alarm_class and alarm_after go together", i, sm.GetModel())
+		}
+		if sm.AlarmAfter != nil {
+			if d := sm.AlarmAfter.AsDuration(); d < time.Minute || d > 7*24*time.Hour {
+				return fmt.Errorf("state_models[%d] %s: alarm_after %v out of range (1m..7d)", i, sm.GetModel(), d)
+			}
+		}
+	}
 	for i, o := range cfg.Occupancy {
 		if o.GetZone() == "" {
 			return fmt.Errorf("occupancy[%d]: zone is required", i)
