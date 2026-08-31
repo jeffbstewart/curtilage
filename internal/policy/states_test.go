@@ -53,7 +53,8 @@ func TestStatesRules(t *testing.T) {
 	}
 	// Close and reopen: the alarm re-arms.
 	class(5000, "gmw_garage_door_closed")
-	if c := tick(5021); len(c) != 1 || Describe(c[0].Event) != "Bmw garage door: closed" {
+	// The typo'd class name cannot be prefix-stripped: shown whole.
+	if c := tick(5021); len(c) != 1 || Describe(c[0].Event) != "Bmw garage door: gmw garage door closed" {
 		t.Fatalf("believed close: %+v", c)
 	}
 	class(6000, "bmw_garage_door_open")
