@@ -438,8 +438,12 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  .pane.pinned { border-color: #06c; }
  .pane .cam { position: absolute; top: .3rem; left: .5rem; color: #fff; text-shadow: 0 0 4px #000; font-weight: 600; }
  .pane video { width: 100%; display: block; }
- body.follow .pane { display: none; }
- body.follow .pane.show { display: block; }
+ /* Follow: the active camera large, the rest a filmstrip of live
+    thumbnails.  Never display:none -- browsers pause hidden media,
+    which freezes the master clock and kills the handoffs. */
+ body.follow .grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
+ body.follow .pane { flex: 0 0 140px; }
+ body.follow .pane.show { flex: 1 1 100%; order: -1; }
  ul.hist { color: #666; }
  a { color: #06c; }
 </style>
@@ -452,7 +456,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  <button id="mode">follow</button>
 </div>
 <div class="grid" id="grid">
-{{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video preload="metadata" muted playsinline src="{{.Src}}"></video></div>
+{{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video autoplay preload="auto" muted playsinline src="{{.Src}}"></video></div>
 {{end}}</div>
 {{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}
 <script>
@@ -461,9 +465,13 @@ const panes = [...document.querySelectorAll('.pane')];
 const vids = panes.map(p => p.querySelector('video'));
 const seek = document.getElementById('seek'), play = document.getElementById('play'),
       clock = document.getElementById('clock'), mode = document.getElementById('mode');
-let pinned = null;
+let pinned = null, scrubbing = false;
 function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
 function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
+// The master clock is the furthest-ahead video: robust against any
+// one pane loading slowly or being throttled.
+function master() { return Math.max(...vids.map(v => v.currentTime || 0), 0); }
+function playing() { return vids.some(v => !v.paused && !v.ended); }
 function best(t) {
   if (pinned) return pinned;
   let c = null, s = -1;
@@ -472,29 +480,35 @@ function best(t) {
   return c || (panes[0] && panes[0].dataset.cam);
 }
 function paint() {
-  const t = vids[0] ? vids[0].currentTime : 0;
-  seek.max = dur(); seek.value = t; clock.textContent = fmt(t);
+  const t = master();
+  if (!scrubbing) { seek.max = dur(); seek.value = t; }
+  clock.textContent = fmt(t) + ' / ' + fmt(dur());
+  play.textContent = playing() ? 'pause' : 'play';
   const b = best(t);
-  panes.forEach(p => {
+  panes.forEach((p, i) => {
     p.classList.toggle('active', p.dataset.cam === b);
     p.classList.toggle('show', p.dataset.cam === b);
     p.classList.toggle('pinned', p.dataset.cam === pinned);
+    // Drag stragglers back to the master clock and restart anything
+    // the browser decided to stop.
+    const v = vids[i];
+    if (playing() && !v.ended) {
+      if (v.paused) { v.currentTime = t; v.play().catch(() => {}); }
+      else if (!v.seeking && Math.abs(v.currentTime - t) > 0.5) v.currentTime = t;
+    }
   });
 }
 play.onclick = () => {
-  const paused = vids[0] && vids[0].paused;
-  vids.forEach(v => paused ? v.play() : v.pause());
-  play.textContent = paused ? 'pause' : 'play';
+  const go = !playing();
+  vids.forEach(v => go ? v.play().catch(() => {}) : v.pause());
 };
-seek.oninput = () => vids.forEach(v => { v.currentTime = +seek.value; });
+seek.oninput = () => { scrubbing = true; vids.forEach(v => { v.currentTime = +seek.value; }); };
+seek.onchange = () => { scrubbing = false; };
 mode.onclick = () => {
   document.body.classList.toggle('follow');
   mode.textContent = document.body.classList.contains('follow') ? 'grid' : 'follow';
 };
-panes.forEach(p => p.onclick = e => {
-  if (e.target.tagName === 'VIDEO' && !document.body.classList.contains('follow')) return;
-  pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; paint();
-});
+panes.forEach(p => p.onclick = () => { pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; paint(); });
 setInterval(paint, 200);
 </script>
 `))
