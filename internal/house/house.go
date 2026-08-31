@@ -478,10 +478,21 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  a { color: #06c; }
  .build { position: fixed; right: .6rem; bottom: .4rem; color: #aaa; font-size: .72rem; font-family: ui-monospace, monospace; background: #fafafacc; padding: 0 .3rem; border-radius: 3px; }
  .build a { color: #999; }
+ .tabs button { border: 1px solid #ccc; background: #fff; border-radius: 4px 0 0 4px; }
+ .tabs button + button { border-left: 0; border-radius: 0 4px 4px 0; }
+ .tabs button.on { background: #06c; color: #fff; border-color: #06c; }
+ /* Follow: the target camera large, the rest a filmstrip of live
+    thumbnails.  Never display:none -- browsers pause hidden media,
+    which would freeze the master clock. */
+ body.follow .grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
+ body.follow .pane { flex: 0 0 140px; }
+ body.follow .pane.show { flex: 1 1 100%; order: -1; }
+ body.follow .pane.big { grid-column: auto; }
 </style>
 <h1>{{.What}}</h1>
-<div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where a follow-the-action view would look right now -- a preview that shows exactly where it is wrong. <a href="/house/">back to the house</a></div>
+<div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where the follow tab would look right now; in follow, click a thumbnail to pin it. <a href="/house/">back to the house</a></div>
 <div class="bar">
+ <span class="tabs"><button id="tabgrid" class="on">grid</button><button id="tabfollow">follow</button></span>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
@@ -505,7 +516,9 @@ let scrubbing = false;
 // between cameras and this is where they will appear -- else stay
 // with whoever saw them last.
 const LAG = 2.5;
+let pinned = null;
 function best(t) {
+  if (pinned) return pinned;
   let c = null, s = -1;
   for (const sp of spans) {
     const e = Math.max(sp.e - LAG, sp.s + 0.7);
@@ -531,7 +544,10 @@ function paint() {
   clock.textContent = fmt(t) + ' / ' + fmt(dur());
   play.textContent = playing() ? 'pause' : 'play';
   const b = best(t);
-  panes.forEach(p => p.classList.toggle('active', p.dataset.cam === b));
+  panes.forEach(p => {
+    p.classList.toggle('active', p.dataset.cam === b);
+    p.classList.toggle('show', p.dataset.cam === b);
+  });
   // Time sync is the whole game: drag stragglers back to the master
   // clock and restart anything the browser decided to stop.
   vids.forEach(v => {
@@ -547,7 +563,23 @@ play.onclick = () => {
 };
 seek.oninput = () => { scrubbing = true; vids.forEach(v => { v.currentTime = +seek.value; }); };
 seek.onchange = () => { scrubbing = false; };
-panes.forEach(p => p.onclick = () => p.classList.toggle('big'));
+const tabgrid = document.getElementById('tabgrid'), tabfollow = document.getElementById('tabfollow');
+function setTab(follow) {
+  document.body.classList.toggle('follow', follow);
+  tabgrid.classList.toggle('on', !follow);
+  tabfollow.classList.toggle('on', follow);
+  paint();
+}
+tabgrid.onclick = () => setTab(false);
+tabfollow.onclick = () => setTab(true);
+panes.forEach(p => p.onclick = () => {
+  if (document.body.classList.contains('follow')) {
+    pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; // pin this camera, or let best() drive again
+  } else {
+    p.classList.toggle('big');
+  }
+  paint();
+});
 setInterval(paint, 200);
 </script>
 `))
