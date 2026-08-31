@@ -690,7 +690,12 @@ type Event struct {
 	Path []string `protobuf:"bytes,13,rep,name=path,proto3" json:"path,omitempty"`
 	// Every camera that saw it, in the order they first did; camera
 	// above is the first.
-	Cameras       []string `protobuf:"bytes,14,rep,name=cameras,proto3" json:"cameras,omitempty"`
+	Cameras []string `protobuf:"bytes,14,rep,name=cameras,proto3" json:"cameras,omitempty"`
+	// For EVENT_KIND_ACTIVITY: when each camera saw something, one span
+	// per underlying object.  The switching signal for a
+	// follow-the-action view; all clips of one event share the same
+	// absolute window, so panes are time-synchronized by construction.
+	Spans         []*CameraSpan `protobuf:"bytes,15,rep,name=spans,proto3" json:"spans,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -823,6 +828,84 @@ func (x *Event) GetCameras() []string {
 	return nil
 }
 
+func (x *Event) GetSpans() []*CameraSpan {
+	if x != nil {
+		return x.Spans
+	}
+	return nil
+}
+
+// One camera's sighting within an activity.
+type CameraSpan struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Camera string                 `protobuf:"bytes,1,opt,name=camera,proto3" json:"camera,omitempty"`
+	// What it saw: "person", "dog".
+	Label     string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// Unset while that sighting is still live.
+	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CameraSpan) Reset() {
+	*x = CameraSpan{}
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CameraSpan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CameraSpan) ProtoMessage() {}
+
+func (x *CameraSpan) ProtoReflect() protoreflect.Message {
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CameraSpan.ProtoReflect.Descriptor instead.
+func (*CameraSpan) Descriptor() ([]byte, []int) {
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CameraSpan) GetCamera() string {
+	if x != nil {
+		return x.Camera
+	}
+	return ""
+}
+
+func (x *CameraSpan) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *CameraSpan) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
+	}
+	return nil
+}
+
+func (x *CameraSpan) GetEndedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndedAt
+	}
+	return nil
+}
+
 // Where an Event came from, for logs and human eyes only.  This
 // message is OUTSIDE the compatibility promise: fields may be added,
 // renamed, or removed at any time without an API version change.  A
@@ -840,7 +923,7 @@ type EventDebug struct {
 
 func (x *EventDebug) Reset() {
 	*x = EventDebug{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -852,7 +935,7 @@ func (x *EventDebug) String() string {
 func (*EventDebug) ProtoMessage() {}
 
 func (x *EventDebug) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[7]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -865,7 +948,7 @@ func (x *EventDebug) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventDebug.ProtoReflect.Descriptor instead.
 func (*EventDebug) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{7}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EventDebug) GetSourceId() string {
@@ -897,7 +980,7 @@ type ListEventsRequest struct {
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -909,7 +992,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[8]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -922,7 +1005,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{8}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListEventsRequest) GetCameras() []string {
@@ -960,7 +1043,7 @@ type ListEventsResponse struct {
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1055,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[9]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +1068,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{9}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListEventsResponse) GetEvents() []*Event {
@@ -1015,7 +1098,7 @@ type WatchEventsRequest struct {
 
 func (x *WatchEventsRequest) Reset() {
 	*x = WatchEventsRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1027,7 +1110,7 @@ func (x *WatchEventsRequest) String() string {
 func (*WatchEventsRequest) ProtoMessage() {}
 
 func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[10]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1040,7 +1123,7 @@ func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
 func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{10}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WatchEventsRequest) GetSince() *timestamppb.Timestamp {
@@ -1068,7 +1151,7 @@ type WatchEventsResponse struct {
 
 func (x *WatchEventsResponse) Reset() {
 	*x = WatchEventsResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1080,7 +1163,7 @@ func (x *WatchEventsResponse) String() string {
 func (*WatchEventsResponse) ProtoMessage() {}
 
 func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[11]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1093,7 +1176,7 @@ func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsResponse.ProtoReflect.Descriptor instead.
 func (*WatchEventsResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{11}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *WatchEventsResponse) GetChange() EventChange {
@@ -1111,16 +1194,20 @@ func (x *WatchEventsResponse) GetEvent() *Event {
 }
 
 type GetMediaRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Media         Media                  `protobuf:"varint,2,opt,name=media,proto3,enum=curtilage.v1.Media" json:"media,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	EventId string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Media   Media                  `protobuf:"varint,2,opt,name=media,proto3,enum=curtilage.v1.Media" json:"media,omitempty"`
+	// For MEDIA_CLIP on a multi-camera event: this camera's view of the
+	// same window (must be one of the event's cameras).  Empty: the
+	// leading camera.
+	Camera        string `protobuf:"bytes,3,opt,name=camera,proto3" json:"camera,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetMediaRequest) Reset() {
 	*x = GetMediaRequest{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1219,7 @@ func (x *GetMediaRequest) String() string {
 func (*GetMediaRequest) ProtoMessage() {}
 
 func (x *GetMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[12]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1232,7 @@ func (x *GetMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaRequest.ProtoReflect.Descriptor instead.
 func (*GetMediaRequest) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{12}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetMediaRequest) GetEventId() string {
@@ -1160,6 +1247,13 @@ func (x *GetMediaRequest) GetMedia() Media {
 		return x.Media
 	}
 	return Media_MEDIA_UNKNOWN
+}
+
+func (x *GetMediaRequest) GetCamera() string {
+	if x != nil {
+		return x.Camera
+	}
+	return ""
 }
 
 // One message of the GetMedia stream.  Each message carries exactly
@@ -1180,7 +1274,7 @@ type GetMediaResponse struct {
 
 func (x *GetMediaResponse) Reset() {
 	*x = GetMediaResponse{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1192,7 +1286,7 @@ func (x *GetMediaResponse) String() string {
 func (*GetMediaResponse) ProtoMessage() {}
 
 func (x *GetMediaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[13]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1205,7 +1299,7 @@ func (x *GetMediaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaResponse.ProtoReflect.Descriptor instead.
 func (*GetMediaResponse) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{13}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetMediaResponse) GetPayload() isGetMediaResponse_Payload {
@@ -1262,7 +1356,7 @@ type MediaInfo struct {
 
 func (x *MediaInfo) Reset() {
 	*x = MediaInfo{}
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[14]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1274,7 +1368,7 @@ func (x *MediaInfo) String() string {
 func (*MediaInfo) ProtoMessage() {}
 
 func (x *MediaInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_curtilage_v1_curtilage_proto_msgTypes[14]
+	mi := &file_curtilage_v1_curtilage_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1287,7 +1381,7 @@ func (x *MediaInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaInfo.ProtoReflect.Descriptor instead.
 func (*MediaInfo) Descriptor() ([]byte, []int) {
-	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{14}
+	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MediaInfo) GetContentType() string {
@@ -1329,7 +1423,7 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\acameras\x18\x01 \x03(\v2\x14.curtilage.v1.CameraR\acameras\"9\n" +
 	"\vObjectCount\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\rR\x05count\"\xfa\x03\n" +
+	"\x05count\x18\x02 \x01(\rR\x05count\"\xaa\x04\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06camera\x18\x02 \x01(\tR\x06camera\x12\x14\n" +
@@ -1346,7 +1440,15 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x05debug\x18\v \x01(\v2\x18.curtilage.v1.EventDebugR\x05debug\x123\n" +
 	"\aobjects\x18\f \x03(\v2\x19.curtilage.v1.ObjectCountR\aobjects\x12\x12\n" +
 	"\x04path\x18\r \x03(\tR\x04path\x12\x18\n" +
-	"\acameras\x18\x0e \x03(\tR\acameras\"H\n" +
+	"\acameras\x18\x0e \x03(\tR\acameras\x12.\n" +
+	"\x05spans\x18\x0f \x03(\v2\x18.curtilage.v1.CameraSpanR\x05spans\"\xac\x01\n" +
+	"\n" +
+	"CameraSpan\x12\x16\n" +
+	"\x06camera\x18\x01 \x01(\tR\x06camera\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x129\n" +
+	"\n" +
+	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
+	"\bended_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\"H\n" +
 	"\n" +
 	"EventDebug\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x1d\n" +
@@ -1364,10 +1466,11 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\acameras\x18\x02 \x03(\tR\acameras\"s\n" +
 	"\x13WatchEventsResponse\x121\n" +
 	"\x06change\x18\x01 \x01(\x0e2\x19.curtilage.v1.EventChangeR\x06change\x12)\n" +
-	"\x05event\x18\x02 \x01(\v2\x13.curtilage.v1.EventR\x05event\"W\n" +
+	"\x05event\x18\x02 \x01(\v2\x13.curtilage.v1.EventR\x05event\"o\n" +
 	"\x0fGetMediaRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12)\n" +
-	"\x05media\x18\x02 \x01(\x0e2\x13.curtilage.v1.MediaR\x05media\"d\n" +
+	"\x05media\x18\x02 \x01(\x0e2\x13.curtilage.v1.MediaR\x05media\x12\x16\n" +
+	"\x06camera\x18\x03 \x01(\tR\x06camera\"d\n" +
 	"\x10GetMediaResponse\x12-\n" +
 	"\x04info\x18\x01 \x01(\v2\x17.curtilage.v1.MediaInfoH\x00R\x04info\x12\x16\n" +
 	"\x05chunk\x18\x02 \x01(\fH\x00R\x05chunkB\t\n" +
@@ -1422,7 +1525,7 @@ func file_curtilage_v1_curtilage_proto_rawDescGZIP() []byte {
 }
 
 var file_curtilage_v1_curtilage_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_curtilage_v1_curtilage_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_curtilage_v1_curtilage_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_curtilage_v1_curtilage_proto_goTypes = []any{
 	(Platform)(0),                 // 0: curtilage.v1.Platform
 	(EventKind)(0),                // 1: curtilage.v1.EventKind
@@ -1436,48 +1539,52 @@ var file_curtilage_v1_curtilage_proto_goTypes = []any{
 	(*ListCamerasResponse)(nil),   // 9: curtilage.v1.ListCamerasResponse
 	(*ObjectCount)(nil),           // 10: curtilage.v1.ObjectCount
 	(*Event)(nil),                 // 11: curtilage.v1.Event
-	(*EventDebug)(nil),            // 12: curtilage.v1.EventDebug
-	(*ListEventsRequest)(nil),     // 13: curtilage.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),    // 14: curtilage.v1.ListEventsResponse
-	(*WatchEventsRequest)(nil),    // 15: curtilage.v1.WatchEventsRequest
-	(*WatchEventsResponse)(nil),   // 16: curtilage.v1.WatchEventsResponse
-	(*GetMediaRequest)(nil),       // 17: curtilage.v1.GetMediaRequest
-	(*GetMediaResponse)(nil),      // 18: curtilage.v1.GetMediaResponse
-	(*MediaInfo)(nil),             // 19: curtilage.v1.MediaInfo
-	(*durationpb.Duration)(nil),   // 20: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 21: google.protobuf.Timestamp
+	(*CameraSpan)(nil),            // 12: curtilage.v1.CameraSpan
+	(*EventDebug)(nil),            // 13: curtilage.v1.EventDebug
+	(*ListEventsRequest)(nil),     // 14: curtilage.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),    // 15: curtilage.v1.ListEventsResponse
+	(*WatchEventsRequest)(nil),    // 16: curtilage.v1.WatchEventsRequest
+	(*WatchEventsResponse)(nil),   // 17: curtilage.v1.WatchEventsResponse
+	(*GetMediaRequest)(nil),       // 18: curtilage.v1.GetMediaRequest
+	(*GetMediaResponse)(nil),      // 19: curtilage.v1.GetMediaResponse
+	(*MediaInfo)(nil),             // 20: curtilage.v1.MediaInfo
+	(*durationpb.Duration)(nil),   // 21: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
 }
 var file_curtilage_v1_curtilage_proto_depIdxs = []int32{
 	0,  // 0: curtilage.v1.GetServerInfoRequest.platform:type_name -> curtilage.v1.Platform
-	20, // 1: curtilage.v1.GetServerInfoResponse.retention:type_name -> google.protobuf.Duration
+	21, // 1: curtilage.v1.GetServerInfoResponse.retention:type_name -> google.protobuf.Duration
 	8,  // 2: curtilage.v1.ListCamerasResponse.cameras:type_name -> curtilage.v1.Camera
 	1,  // 3: curtilage.v1.Event.kind:type_name -> curtilage.v1.EventKind
-	21, // 4: curtilage.v1.Event.started_at:type_name -> google.protobuf.Timestamp
-	21, // 5: curtilage.v1.Event.ended_at:type_name -> google.protobuf.Timestamp
+	22, // 4: curtilage.v1.Event.started_at:type_name -> google.protobuf.Timestamp
+	22, // 5: curtilage.v1.Event.ended_at:type_name -> google.protobuf.Timestamp
 	2,  // 6: curtilage.v1.Event.clip:type_name -> curtilage.v1.ClipState
-	12, // 7: curtilage.v1.Event.debug:type_name -> curtilage.v1.EventDebug
+	13, // 7: curtilage.v1.Event.debug:type_name -> curtilage.v1.EventDebug
 	10, // 8: curtilage.v1.Event.objects:type_name -> curtilage.v1.ObjectCount
-	11, // 9: curtilage.v1.ListEventsResponse.events:type_name -> curtilage.v1.Event
-	21, // 10: curtilage.v1.WatchEventsRequest.since:type_name -> google.protobuf.Timestamp
-	3,  // 11: curtilage.v1.WatchEventsResponse.change:type_name -> curtilage.v1.EventChange
-	11, // 12: curtilage.v1.WatchEventsResponse.event:type_name -> curtilage.v1.Event
-	4,  // 13: curtilage.v1.GetMediaRequest.media:type_name -> curtilage.v1.Media
-	19, // 14: curtilage.v1.GetMediaResponse.info:type_name -> curtilage.v1.MediaInfo
-	5,  // 15: curtilage.v1.CurtilageService.GetServerInfo:input_type -> curtilage.v1.GetServerInfoRequest
-	7,  // 16: curtilage.v1.CurtilageService.ListCameras:input_type -> curtilage.v1.ListCamerasRequest
-	13, // 17: curtilage.v1.CurtilageService.ListEvents:input_type -> curtilage.v1.ListEventsRequest
-	15, // 18: curtilage.v1.CurtilageService.WatchEvents:input_type -> curtilage.v1.WatchEventsRequest
-	17, // 19: curtilage.v1.CurtilageService.GetMedia:input_type -> curtilage.v1.GetMediaRequest
-	6,  // 20: curtilage.v1.CurtilageService.GetServerInfo:output_type -> curtilage.v1.GetServerInfoResponse
-	9,  // 21: curtilage.v1.CurtilageService.ListCameras:output_type -> curtilage.v1.ListCamerasResponse
-	14, // 22: curtilage.v1.CurtilageService.ListEvents:output_type -> curtilage.v1.ListEventsResponse
-	16, // 23: curtilage.v1.CurtilageService.WatchEvents:output_type -> curtilage.v1.WatchEventsResponse
-	18, // 24: curtilage.v1.CurtilageService.GetMedia:output_type -> curtilage.v1.GetMediaResponse
-	20, // [20:25] is the sub-list for method output_type
-	15, // [15:20] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	12, // 9: curtilage.v1.Event.spans:type_name -> curtilage.v1.CameraSpan
+	22, // 10: curtilage.v1.CameraSpan.started_at:type_name -> google.protobuf.Timestamp
+	22, // 11: curtilage.v1.CameraSpan.ended_at:type_name -> google.protobuf.Timestamp
+	11, // 12: curtilage.v1.ListEventsResponse.events:type_name -> curtilage.v1.Event
+	22, // 13: curtilage.v1.WatchEventsRequest.since:type_name -> google.protobuf.Timestamp
+	3,  // 14: curtilage.v1.WatchEventsResponse.change:type_name -> curtilage.v1.EventChange
+	11, // 15: curtilage.v1.WatchEventsResponse.event:type_name -> curtilage.v1.Event
+	4,  // 16: curtilage.v1.GetMediaRequest.media:type_name -> curtilage.v1.Media
+	20, // 17: curtilage.v1.GetMediaResponse.info:type_name -> curtilage.v1.MediaInfo
+	5,  // 18: curtilage.v1.CurtilageService.GetServerInfo:input_type -> curtilage.v1.GetServerInfoRequest
+	7,  // 19: curtilage.v1.CurtilageService.ListCameras:input_type -> curtilage.v1.ListCamerasRequest
+	14, // 20: curtilage.v1.CurtilageService.ListEvents:input_type -> curtilage.v1.ListEventsRequest
+	16, // 21: curtilage.v1.CurtilageService.WatchEvents:input_type -> curtilage.v1.WatchEventsRequest
+	18, // 22: curtilage.v1.CurtilageService.GetMedia:input_type -> curtilage.v1.GetMediaRequest
+	6,  // 23: curtilage.v1.CurtilageService.GetServerInfo:output_type -> curtilage.v1.GetServerInfoResponse
+	9,  // 24: curtilage.v1.CurtilageService.ListCameras:output_type -> curtilage.v1.ListCamerasResponse
+	15, // 25: curtilage.v1.CurtilageService.ListEvents:output_type -> curtilage.v1.ListEventsResponse
+	17, // 26: curtilage.v1.CurtilageService.WatchEvents:output_type -> curtilage.v1.WatchEventsResponse
+	19, // 27: curtilage.v1.CurtilageService.GetMedia:output_type -> curtilage.v1.GetMediaResponse
+	23, // [23:28] is the sub-list for method output_type
+	18, // [18:23] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_curtilage_v1_curtilage_proto_init() }
@@ -1485,7 +1592,7 @@ func file_curtilage_v1_curtilage_proto_init() {
 	if File_curtilage_v1_curtilage_proto != nil {
 		return
 	}
-	file_curtilage_v1_curtilage_proto_msgTypes[13].OneofWrappers = []any{
+	file_curtilage_v1_curtilage_proto_msgTypes[14].OneofWrappers = []any{
 		(*GetMediaResponse_Info)(nil),
 		(*GetMediaResponse_Chunk)(nil),
 	}
@@ -1495,7 +1602,7 @@ func file_curtilage_v1_curtilage_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_curtilage_v1_curtilage_proto_rawDesc), len(file_curtilage_v1_curtilage_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

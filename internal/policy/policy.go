@@ -70,6 +70,16 @@ type Event struct {
 	Path      []string
 	Cameras   []string
 	SourceIDs []string
+	// Spans is when each camera saw something, one per underlying
+	// object: the switching signal for a follow-the-action view.
+	Spans []Span
+}
+
+// Span is one camera's sighting within an activity.
+type Span struct {
+	Camera, Label string
+	Start         time.Time
+	End           time.Time // zero while that sighting is live
 }
 
 // Running reports whether the event has not ended.

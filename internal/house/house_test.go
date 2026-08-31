@@ -113,7 +113,7 @@ func TestPageViews(t *testing.T) {
 	for _, want := range []string{"4 events", "1 still running", "1</b> not sent are hidden", "src-arr-new", "src-live", "household: 3", "nobody (list only): 1", "/media/", `<span class="live">live</span>`,
 		// The activity: its final sentence, then how it evolved, newest
 		// first, with the no-change revision folded away.
-		"<b>Person and a dog started on the porch, moved to the yard (3m0s)</b>",
+		`<b><a class="ev" href="/house/event/walk">Person and a dog started on the porch, moved to the yard (3m0s)</a></b>`,
 		"<li>11:52:00  Person and a dog on the porch</li><li>11:50:00  Person on the porch</li>",
 		"porch-west, porch-east", "2 objects src-walk-1",
 		`<a href="/media/`} {
@@ -146,6 +146,27 @@ func TestPageViews(t *testing.T) {
 		t.Errorf("times not in America/New_York:\n%s", body)
 	}
 	h.Location = nil
+
+	// The event page: sentence, one video per camera, the spans JSON,
+	// and the same 404s for strangers and unknown ids.
+	code, body = get(t, h, "192.168.1.50:1", "", "event/walk")
+	if code != 200 {
+		t.Fatalf("event page -> %d", code)
+	}
+	for _, want := range []string{"Person and a dog started on the porch", "porch-west", "porch-east", "<video", "spans", "follow"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("event page lacks %q", want)
+		}
+	}
+	if n := strings.Count(body, "<video"); n != 2 {
+		t.Errorf("%d videos, want one per camera (2)", n)
+	}
+	if code, _ = get(t, h, "192.168.1.50:1", "", "event/nope"); code != 404 {
+		t.Errorf("unknown event -> %d", code)
+	}
+	if code, _ = get(t, h, "203.0.113.7:1", "", "event/walk"); code != 404 {
+		t.Errorf("outsider on event page -> %d", code)
+	}
 
 	// Window is capped at retention.
 	_, body = get(t, h, "192.168.1.50:1", "", "?hours=9999")

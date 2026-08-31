@@ -144,6 +144,13 @@ func ToProto(e policy.Event) *curtilagev1.Event {
 	for _, l := range labels {
 		out.Objects = append(out.Objects, &curtilagev1.ObjectCount{Label: l, Count: uint32(e.Objects[l])})
 	}
+	for _, sp := range e.Spans {
+		p := &curtilagev1.CameraSpan{Camera: sp.Camera, Label: sp.Label, StartedAt: timestamppb.New(sp.Start)}
+		if !sp.End.IsZero() {
+			p.EndedAt = timestamppb.New(sp.End)
+		}
+		out.Spans = append(out.Spans, p)
+	}
 	return out
 }
 

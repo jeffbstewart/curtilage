@@ -12,6 +12,7 @@
 package house
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -104,6 +105,7 @@ func inAny(ip net.IP, nets []*net.IPNet) bool {
 
 // row is one event as the page shows it.
 type row struct {
+	ID       string
 	When     string
 	Camera   string
 	Label    string
@@ -151,6 +153,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if id, ok := strings.CutPrefix(r.URL.Path, "/house/event/"); ok {
+		h.event(w, id)
 		return
 	}
 	now := time.Now()
@@ -214,6 +220,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) row(e policy.Event, now time.Time) row {
 	rw := row{
+		ID:       e.ID,
 		When:     e.StartedAt.In(h.loc()).Format("Mon 15:04:05"),
 		Camera:   e.Camera,
 		Label:    e.Label,
@@ -297,6 +304,8 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  img { height: 64px; border-radius: 4px; display: block; }
  .live { color: #b00; font-weight: 600; }
  .aud-nobody { color: #888; }
+ a.ev { color: inherit; text-decoration: none; }
+ a.ev:hover { text-decoration: underline; }
  .aud-household { color: #060; font-weight: 600; }
  .src { color: #999; font-size: .75rem; font-family: ui-monospace, monospace; }
  ul.hist { margin: .2rem 0 0 1rem; padding: 0; color: #666; font-size: .85rem; }
@@ -314,7 +323,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 {{range .Rows}}<tr>
  <td>{{.When}}{{if .Live}} <span class="live">live</span>{{end}}</td>
  <td class="z">{{.Camera}}</td>
- <td class="z"><b>{{.What}}</b>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
+ <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
  <td>{{if .ClipLink}}<a href="{{.ClipLink}}">play</a> ({{.Clip}}){{else}}{{.Clip}}{{end}}</td>
@@ -323,4 +332,166 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
 </tr>
 {{end}}</table>
+`))
+
+// event serves /house/event/<id>: the one thing that happened, with
+// every involved camera's clip of the SAME absolute window -- which
+// is what makes the panes time-synchronized without any server work.
+// Grid shows them all; follow shows the camera whose sighting covers
+// the playback moment (the spans are the switching signal); clicking
+// a pane pins it.
+func (h *Handler) event(w http.ResponseWriter, id string) {
+	e, ok := h.Store.Get(id)
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	now := time.Now()
+	if h.Now != nil {
+		now = h.Now()
+	}
+	cams := e.Cameras
+	if len(cams) == 0 {
+		cams = []string{e.Camera}
+	}
+	type pane struct {
+		Camera, Src string
+	}
+	p := struct {
+		DisplayName, What, When, Duration string
+		Live                              bool
+		Panes                             []pane
+		History                           []string
+		SpansJSON                         template.JS
+	}{
+		DisplayName: h.DisplayName,
+		What:        policy.Describe(e),
+		When:        e.StartedAt.In(h.loc()).Format("Mon Jan 2 15:04:05"),
+		Live:        e.Running(),
+	}
+	end := e.EndedAt
+	if end.IsZero() {
+		end = now
+	}
+	p.Duration = end.Sub(e.StartedAt).Round(time.Second).String()
+	if h.API != nil && h.API.Keys != nil {
+		for _, c := range cams {
+			if link, err := h.API.CameraLink(e, curtilagev1.Media_MEDIA_CLIP, c, now); err == nil {
+				p.Panes = append(p.Panes, pane{Camera: c, Src: link})
+			}
+		}
+	}
+	hist := h.Store.History(e.ID)
+	prev := ""
+	for _, rev := range hist {
+		if text := policy.Describe(rev.Event); text != prev {
+			prev = text
+			p.History = append(p.History, rev.At.In(h.loc()).Format("15:04:05")+"  "+text)
+		}
+	}
+	// Spans as seconds relative to the clip window's start (start-5s),
+	// so they line up with video playback time.
+	clipStart := e.StartedAt.Add(-5 * time.Second)
+	type spanJSON struct {
+		C string  `json:"c"`
+		S float64 `json:"s"`
+		E float64 `json:"e"`
+	}
+	var spans []spanJSON
+	for _, sp := range e.Spans {
+		se := sp.End
+		if se.IsZero() {
+			se = end
+		}
+		spans = append(spans, spanJSON{C: sp.Camera, S: sp.Start.Sub(clipStart).Seconds(), E: se.Sub(clipStart).Seconds()})
+	}
+	if b, err := json.Marshal(spans); err == nil {
+		p.SpansJSON = template.JS(b)
+	} else {
+		p.SpansJSON = template.JS("[]")
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if err := eventTmpl.Execute(w, p); err != nil {
+		log.Printf("house: event render: %v", err)
+	}
+}
+
+var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.What}}</title>
+<style>
+ body { font: 14px/1.4 system-ui, sans-serif; margin: 1.5rem; color: #222; background: #fafafa; }
+ h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+ .sub { color: #666; margin-bottom: 1rem; }
+ .bar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1rem; }
+ .bar input[type=range] { flex: 1; }
+ button { font: inherit; padding: .3rem .8rem; }
+ .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: .75rem; }
+ .pane { position: relative; border: 3px solid transparent; border-radius: 6px; overflow: hidden; background: #000; cursor: pointer; }
+ .pane.active { border-color: #b00; }
+ .pane.pinned { border-color: #06c; }
+ .pane .cam { position: absolute; top: .3rem; left: .5rem; color: #fff; text-shadow: 0 0 4px #000; font-weight: 600; }
+ .pane video { width: 100%; display: block; }
+ body.follow .pane { display: none; }
+ body.follow .pane.show { display: block; }
+ ul.hist { color: #666; }
+ a { color: #06c; }
+</style>
+<h1>{{.What}}</h1>
+<div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. <a href="/house/">back to the house</a></div>
+<div class="bar">
+ <button id="play">play</button>
+ <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
+ <span id="clock">0:00</span>
+ <button id="mode">follow</button>
+</div>
+<div class="grid" id="grid">
+{{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video preload="metadata" muted playsinline src="{{.Src}}"></video></div>
+{{end}}</div>
+{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}
+<script>
+const spans = {{.SpansJSON}};
+const panes = [...document.querySelectorAll('.pane')];
+const vids = panes.map(p => p.querySelector('video'));
+const seek = document.getElementById('seek'), play = document.getElementById('play'),
+      clock = document.getElementById('clock'), mode = document.getElementById('mode');
+let pinned = null;
+function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
+function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
+function best(t) {
+  if (pinned) return pinned;
+  let c = null, s = -1;
+  for (const sp of spans) if (sp.s <= t && t <= sp.e && sp.s > s &&
+      panes.some(p => p.dataset.cam === sp.c)) { c = sp.c; s = sp.s; }
+  return c || (panes[0] && panes[0].dataset.cam);
+}
+function paint() {
+  const t = vids[0] ? vids[0].currentTime : 0;
+  seek.max = dur(); seek.value = t; clock.textContent = fmt(t);
+  const b = best(t);
+  panes.forEach(p => {
+    p.classList.toggle('active', p.dataset.cam === b);
+    p.classList.toggle('show', p.dataset.cam === b);
+    p.classList.toggle('pinned', p.dataset.cam === pinned);
+  });
+}
+play.onclick = () => {
+  const paused = vids[0] && vids[0].paused;
+  vids.forEach(v => paused ? v.play() : v.pause());
+  play.textContent = paused ? 'pause' : 'play';
+};
+seek.oninput = () => vids.forEach(v => { v.currentTime = +seek.value; });
+mode.onclick = () => {
+  document.body.classList.toggle('follow');
+  mode.textContent = document.body.classList.contains('follow') ? 'grid' : 'follow';
+};
+panes.forEach(p => p.onclick = e => {
+  if (e.target.tagName === 'VIDEO' && !document.body.classList.contains('follow')) return;
+  pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; paint();
+});
+setInterval(paint, 200);
+</script>
 `))
