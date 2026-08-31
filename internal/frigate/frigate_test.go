@@ -54,6 +54,17 @@ func TestSubLabelShapes(t *testing.T) {
 	}
 }
 
+func TestRecognizedPlate(t *testing.T) {
+	e, err := ParseEvent([]byte(`{"type":"update","after":{"id":"x","camera":"c","label":"car","recognized_license_plate":["5CKX83",0.99]}}`))
+	if err != nil || string(e.After.Plate) != "5CKX83" {
+		t.Fatalf("plate = %q, %v", e.After.Plate, err)
+	}
+	e, err = ParseEvent([]byte(`{"type":"update","after":{"id":"x","camera":"c","label":"car","recognized_license_plate":null}}`))
+	if err != nil || e.After.Plate != "" {
+		t.Fatalf("null plate = %q, %v", e.After.Plate, err)
+	}
+}
+
 func TestSecondsTime(t *testing.T) {
 	if !Seconds(0).Time().IsZero() {
 		t.Error("null time must be the zero Time")

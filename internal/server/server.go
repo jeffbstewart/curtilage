@@ -124,6 +124,7 @@ func ToProto(e policy.Event) *curtilagev1.Event {
 		Camera:      e.Camera,
 		Label:       e.Label,
 		SubLabel:    e.SubLabel,
+		Plate:       e.Plate,
 		Zones:       e.Zones,
 		Kind:        kindToProto(e.Kind),
 		StartedAt:   timestamppb.New(e.StartedAt),

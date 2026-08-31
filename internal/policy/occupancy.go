@@ -46,7 +46,10 @@ type Occupancy struct {
 
 type occTrack struct {
 	source, camera, label string
-	snapshot              bool
+	// plate is LPR's read, subLabel a known plate's friendly name;
+	// both sticky: a later read never erases an earlier one.
+	plate, subLabel string
+	snapshot        bool
 	// entered is when the track first held each watched zone; a zone
 	// left is deleted, so re-entry restarts the dwell clock.
 	entered map[string]time.Time
@@ -143,6 +146,12 @@ func (o *Occupancy) absorb(at time.Time, msg *frigate.Event) {
 		o.tracks[obj.ID] = tr
 	}
 	tr.snapshot = tr.snapshot || obj.HasSnapshot
+	if p := string(obj.Plate); p != "" {
+		tr.plate = p
+	}
+	if s := string(obj.SubLabel); s != "" {
+		tr.subLabel = s
+	}
 	// Zone membership is CURRENT zones while the object moves -- a car
 	// that drove through the driveway and parked beyond it has left
 	// the driveway.  But Frigate empties current_zones once an object
@@ -250,6 +259,12 @@ func (o *Occupancy) event(l *ledger, at time.Time, kind Kind) Event {
 		ev.Camera = tr.camera
 		ev.SourceID = tr.source
 		ev.HasSnapshot = tr.snapshot
+		if ev.Plate == "" {
+			ev.Plate = tr.plate
+		}
+		if ev.SubLabel == "" {
+			ev.SubLabel = tr.subLabel
+		}
 		if !slices.Contains(ev.Cameras, tr.camera) {
 			ev.Cameras = append(ev.Cameras, tr.camera)
 		}

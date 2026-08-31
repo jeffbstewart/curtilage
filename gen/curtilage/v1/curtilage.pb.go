@@ -708,7 +708,11 @@ type Event struct {
 	// per underlying object.  The switching signal for a
 	// follow-the-action view; all clips of one event share the same
 	// absolute window, so panes are time-synchronized by construction.
-	Spans         []*CameraSpan `protobuf:"bytes,15,rep,name=spans,proto3" json:"spans,omitempty"`
+	Spans []*CameraSpan `protobuf:"bytes,15,rep,name=spans,proto3" json:"spans,omitempty"`
+	// A license plate read for a vehicle event ("5CKX83"), when LPR
+	// resolved one.  A known plate's friendly name ("Jeff's BMW")
+	// arrives in sub_label as well; this is always the raw read.
+	Plate         string `protobuf:"bytes,16,opt,name=plate,proto3" json:"plate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -846,6 +850,13 @@ func (x *Event) GetSpans() []*CameraSpan {
 		return x.Spans
 	}
 	return nil
+}
+
+func (x *Event) GetPlate() string {
+	if x != nil {
+		return x.Plate
+	}
+	return ""
 }
 
 // One camera's sighting within an activity.
@@ -1436,7 +1447,7 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\acameras\x18\x01 \x03(\v2\x14.curtilage.v1.CameraR\acameras\"9\n" +
 	"\vObjectCount\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\rR\x05count\"\xaa\x04\n" +
+	"\x05count\x18\x02 \x01(\rR\x05count\"\xc0\x04\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06camera\x18\x02 \x01(\tR\x06camera\x12\x14\n" +
@@ -1454,7 +1465,8 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\aobjects\x18\f \x03(\v2\x19.curtilage.v1.ObjectCountR\aobjects\x12\x12\n" +
 	"\x04path\x18\r \x03(\tR\x04path\x12\x18\n" +
 	"\acameras\x18\x0e \x03(\tR\acameras\x12.\n" +
-	"\x05spans\x18\x0f \x03(\v2\x18.curtilage.v1.CameraSpanR\x05spans\"\xac\x01\n" +
+	"\x05spans\x18\x0f \x03(\v2\x18.curtilage.v1.CameraSpanR\x05spans\x12\x14\n" +
+	"\x05plate\x18\x10 \x01(\tR\x05plate\"\xac\x01\n" +
 	"\n" +
 	"CameraSpan\x12\x16\n" +
 	"\x06camera\x18\x01 \x01(\tR\x06camera\x12\x14\n" +

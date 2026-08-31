@@ -17,6 +17,23 @@ func carMsg(typ, id, camera string, zones []string, start float64) []byte {
 		typ, id, camera, start, z, z))
 }
 
+// A recognized plate (and a known plate's name in sub_label) rides
+// the arrival event.
+func TestArrivalCarriesIdentity(t *testing.T) {
+	o := NewOccupancy([]Watch{{Zone: "side_parking", ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute}})
+	t0 := time.Date(2026, 8, 31, 22, 0, 0, 0, time.UTC)
+	o.Observe(t0, "frigate/events", []byte(`{"type":"new","after":{"id":"bmw1","camera":"driveway-winchester","label":"car",`+
+		`"sub_label":["Jeff's BMW",0.9],"recognized_license_plate":["1762",0.95],"start_time":1788300000,"end_time":null,`+
+		`"entered_zones":["side_parking"],"current_zones":["side_parking"],"has_snapshot":true,"has_clip":true,"false_positive":false}}`))
+	c := o.Observe(t0.Add(61*time.Second), "frigate/x/status/detect", []byte("ON"))
+	if len(c) != 1 || c[0].Event.Plate != "1762" || c[0].Event.SubLabel != "Jeff's BMW" {
+		t.Fatalf("identity: %+v", c)
+	}
+	if got := Describe(c[0].Event); got != "A car (Jeff's BMW) arrived in the side parking" {
+		t.Fatalf("describe: %q", got)
+	}
+}
+
 func TestOccupancyRules(t *testing.T) {
 	o := NewOccupancy([]Watch{{Zone: "side_parking", ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute}})
 	t0 := time.Date(2026, 8, 30, 22, 0, 0, 0, time.UTC)

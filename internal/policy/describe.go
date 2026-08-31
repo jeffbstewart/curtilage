@@ -41,9 +41,13 @@ func Describe(e Event) string {
 		if len(e.Zones) > 0 {
 			zone = " " + at(e.Zones[0])
 		}
+		who := "A " + e.Label
+		if id := ident(e); id != "" {
+			who += " (" + id + ")"
+		}
 		n := e.Objects[e.Label]
 		if e.Kind == KindArrival {
-			s := fmt.Sprintf("A %s arrived%s", e.Label, zone)
+			s := who + " arrived" + zone
 			if n > 1 {
 				s += fmt.Sprintf(" (%d present)", n)
 			}
@@ -52,7 +56,7 @@ func Describe(e Event) string {
 		if len(e.Zones) > 0 {
 			zone = " the " + place(e.Zones[0])
 		}
-		s := fmt.Sprintf("A %s left%s", e.Label, zone)
+		s := who + " left" + zone
 		switch n {
 		case 0:
 			s += " (empty now)"
@@ -65,8 +69,15 @@ func Describe(e Event) string {
 	}
 	if e.Kind != KindActivity {
 		s := e.Label
+		var notes []string
 		if e.SubLabel != "" {
-			s += " (" + e.SubLabel + ")"
+			notes = append(notes, e.SubLabel)
+		}
+		if e.Plate != "" {
+			notes = append(notes, "plate "+e.Plate)
+		}
+		if len(notes) > 0 {
+			s += " (" + strings.Join(notes, "; ") + ")"
 		}
 		if len(e.Zones) > 0 {
 			s += " in " + strings.Join(e.Zones, ", ")
@@ -89,6 +100,19 @@ func Describe(e Event) string {
 		s += " (" + e.EndedAt.Sub(e.StartedAt).Round(time.Second).String() + ")"
 	}
 	return capitalize(s)
+}
+
+// ident is a vehicle's identity annotation: the known-plate name
+// Frigate put in SubLabel ("Jeff's BMW") when there is one, else the
+// raw plate read.
+func ident(e Event) string {
+	if e.SubLabel != "" {
+		return e.SubLabel
+	}
+	if e.Plate != "" {
+		return "plate " + e.Plate
+	}
+	return ""
 }
 
 // subject: "person", "person and a dog", "2 persons, a dog and a cat".

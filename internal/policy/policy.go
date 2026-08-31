@@ -58,6 +58,9 @@ type Event struct {
 	Camera   string
 	Label    string
 	SubLabel string
+	// Plate is LPR's read of a vehicle's license plate, when it
+	// resolved one; a known plate's friendly name lands in SubLabel.
+	Plate string
 	// Every zone the object has been in, in the order entered.
 	Zones       []string
 	Kind        Kind
@@ -273,6 +276,7 @@ func fromObject(o *frigate.Object, at time.Time) Event {
 		Camera:      o.Camera,
 		Label:       o.Label,
 		SubLabel:    string(o.SubLabel),
+		Plate:       string(o.Plate),
 		Zones:       slices.Clone(zones),
 		Kind:        KindDetection,
 		StartedAt:   started,
@@ -296,6 +300,6 @@ func clipState(o *frigate.Object, running bool) ClipState {
 
 // same reports whether nothing a viewer would notice changed.
 func same(a, b Event) bool {
-	return a.SubLabel == b.SubLabel && a.HasSnapshot == b.HasSnapshot &&
+	return a.SubLabel == b.SubLabel && a.Plate == b.Plate && a.HasSnapshot == b.HasSnapshot &&
 		a.Clip == b.Clip && a.Kind == b.Kind && slices.Equal(a.Zones, b.Zones)
 }
