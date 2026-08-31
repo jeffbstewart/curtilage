@@ -187,6 +187,12 @@ func TestPageViews(t *testing.T) {
 	if n := strings.Count(body, "<video"); n != 2 {
 		t.Errorf("%d videos, want one per camera (2)", n)
 	}
+	// A spanless event (an arrival): its whole window becomes its one
+	// camera's span, so the follow tab has a big pane to promote.
+	code, body = get(t, h, "192.168.1.50:1", "", "event/arr-new")
+	if code != 200 || !strings.Contains(body, `"c":"porch-east"`) || !strings.Contains(body, `"s":0`) {
+		t.Errorf("spanless event page lacks a synthesized span (code %d)", code)
+	}
 	if code, _ = get(t, h, "192.168.1.50:1", "", "event/nope"); code != 404 {
 		t.Errorf("unknown event -> %d", code)
 	}
