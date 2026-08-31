@@ -98,6 +98,12 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, resolved 2026-08-27
+      # The PR number rides the merge commit's subject ("Merge pull
+      # request #20 ..."); stamp it into the binary for the build
+      # badge.  A push with no PR in the subject (a tag) stamps none.
+      - name: PR number
+        id: pr
+        run: echo "num=$(git log -1 --pretty=%s | grep -oE '#[0-9]+' | head -1 | tr -d '#')" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3, resolved 2026-08-27
         with:
           registry: ghcr.io
@@ -115,6 +121,8 @@ jobs:
         with:
           context: .
           push: true
-          build-args: VERSION=${{ github.sha }}
+          build-args: |
+            VERSION=${{ github.sha }}
+            PRNUM=${{ steps.pr.outputs.num }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

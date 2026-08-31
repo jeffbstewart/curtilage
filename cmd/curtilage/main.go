@@ -42,10 +42,12 @@ import (
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
 
-// version and built are set by the build (Dockerfile ldflags):
-// version is the git commit, built the UTC build time.
+// version, prnum and built are set by the build (Dockerfile ldflags):
+// version is the git commit, prnum the pull request that merged it,
+// built the UTC build time.
 var (
 	version = "dev"
+	prnum   = ""
 	built   = "unknown"
 )
 
@@ -262,7 +264,7 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		log.Printf("house page on /house/ for %v (trusted proxies %v)", cfg.GetHouse().GetAllowCidrs(), cfg.GetHouse().GetTrustedProxies())
 	}
 	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies,
-		DisplayName: cfg.DisplayName, Location: config.Location(cfg), Version: version, Built: built})
+		DisplayName: cfg.DisplayName, Location: config.Location(cfg), Version: version, PR: prnum, Built: built})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)
