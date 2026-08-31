@@ -3,6 +3,29 @@
 Ideas waiting on their prerequisites; docs/DESIGN.md is the decision
 record, this is the wish list.  Date each entry.
 
+## Frigate+ (2026-08-31: base model live, new labels tracked)
+
+- **Known plates suppress, then rescind** (2026-08-31).  Frigate's
+  known_plates roster (homenet, canonical config) turns a recognized
+  plate into the car event's sub_label ("Jeff's BMW").  Policy: an
+  arrival by a known plate is household noise, not news -- suppress
+  the notification.  The catch is ordering: the plate often resolves
+  seconds AFTER the arrival would have notified, so the notifier
+  needs rescind.  APNs cannot unsend, but apns-collapse-id lets a
+  follow-up replace the alert in place and a background push can
+  clear it; design this into the notifier when that phase lands.
+  Start with the one plate, expand if it earns it.
+- **Bear pierces do-not-disturb** (2026-08-31).  bear is tracked on
+  every camera (there are bears in town).  A bear detection is an
+  alarm-class event that must blast through DND: iOS critical alerts
+  (needs Apple's entitlement -- apply early, approval is slow) or at
+  minimum time-sensitive interruption level.  Until the app exists it
+  surfaces on the house page like everything else.
+- **Packages** (2026-08-31).  package is tracked on porch-east/down/
+  west, driveway-down and driveway-winchester.  Zones' object lists
+  must include package before those events get zoned (UI edit, then
+  pull); the house page elides unzoned events by design.
+
 ## Phase 4 (the app and the relay)
 
 - **The private club** (2026-08-30/31, DESIGN.md "Delivery",
@@ -40,13 +63,14 @@ the believed state.  What remains of the old entries:
     out yet".
   - Monday 19:00: the cans ARE still at the curb -> "the cans are
     still out".
-  Needs a detector that recognizes the cans (Frigate+ fine-tune or a
-  state classifier on the curb view), a curb zone, and a new policy
-  shape: a scheduled assertion about the world's state at a time, not
-  a reaction to an event.  The notifier and quiet rules it needs
-  arrive with the policy phase either way.  The occupancy ledger
-  (policy/occupancy.go: per zone-and-label counts with arrival dwell
-  and departure grace, built for parked cars) is deliberately
-  label-generic: once Frigate emits a can label in a curb zone, the
-  cans are one config entry, and the Sunday/Monday checks read the
-  same ledger.
+  The detector arrived 2026-08-31: the Frigate+ base model's
+  waste_bin label is tracked on driveway-winchester.  What remains is
+  a curb zone on that view (UI, then pull), one occupancy entry
+  (zone: curb, labels: waste_bin -- the ledger was built
+  label-generic for exactly this), and the scheduled-assertion policy
+  shape: a claim about the world's state at a time, not a reaction to
+  an event.  The notifier and quiet rules it needs arrive with the
+  policy phase either way.  Bonus signal: garbage_truck is tracked on
+  the same view -- a Monday-morning sighting confirms collection
+  actually happened, distinguishing "missed pickup" from "cans out
+  late".
