@@ -96,6 +96,27 @@ func TestPassthroughLifecycle(t *testing.T) {
 	}
 }
 
+// A notable label (config notable_labels) is news anywhere: its
+// track passes through as a household sighting, zone or no zone.
+func TestNotableSighting(t *testing.T) {
+	e := NewIncidents(IncidentConfig{Notable: []string{"bear"}})
+	at := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	bear := []byte(`{"type":"new","before":null,"after":{"id":"b1","camera":"backyard-gate","label":"bear","sub_label":null,` +
+		`"start_time":1788049526.709964,"end_time":null,"entered_zones":[],"current_zones":[],"has_snapshot":true,"has_clip":true,"false_positive":false}}`)
+	got := e.Observe(at, "frigate/events", bear)
+	if len(got) != 1 || got[0].Op != OpStarted || got[0].Event.Kind != KindSighting {
+		t.Fatalf("bear -> %+v", got)
+	}
+	if !Sent(KindSighting) || Audience(KindSighting) != "household" {
+		t.Error("a sighting must reach the household")
+	}
+	// An ordinary unzoned label is still a nobody detection.
+	got = e.Observe(at, "frigate/events", msg("new", "c1", "driveway-corner", nil, false, false, 0))
+	if len(got) != 1 || got[0].Event.Kind != KindDetection {
+		t.Fatalf("car -> %+v", got)
+	}
+}
+
 func TestPassthroughJoinsMidStream(t *testing.T) {
 	p := NewPassthrough()
 	at := time.Now()

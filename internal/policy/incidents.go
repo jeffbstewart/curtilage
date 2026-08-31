@@ -22,6 +22,9 @@ type IncidentConfig struct {
 	// once on one camera to count as two things rather than one
 	// split track.
 	Overlap time.Duration
+	// Notable labels are news ANYWHERE, zoned or not: each sighting
+	// passes through as its own household-audience event (a bear).
+	Notable []string
 }
 
 // DefaultIncidentConfig is what the house starts with.
@@ -87,6 +90,9 @@ func NewIncidents(cfg IncidentConfig) *Incidents {
 	e := &Incidents{cfg: cfg, labels: map[string]bool{}, rest: NewPassthrough(), closed: map[string]time.Time{}}
 	for _, l := range cfg.Labels {
 		e.labels[l] = true
+	}
+	for _, l := range cfg.Notable {
+		e.rest.notable[l] = true
 	}
 	return e
 }

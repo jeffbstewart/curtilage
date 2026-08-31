@@ -32,6 +32,8 @@ func TestDescribeActivity(t *testing.T) {
 		{Event{Kind: KindDeparture, Label: "car", Zones: []string{"right_parking_space"}, Objects: map[string]int{"car": 0}}, "A car left the right parking space (empty now)"},
 		{Event{Kind: KindDeparture, Label: "car", Zones: []string{"side_parking"}, Objects: map[string]int{"car": 1}}, "A car left the side parking (1 remains)"},
 		{Event{Kind: KindDetection, Label: "car"}, "Car"},
+		{Event{Kind: KindSighting, Label: "bear", Camera: "backyard-gate"}, "A bear sighted (backyard-gate)"},
+		{Event{Kind: KindSighting, Label: "bear", Camera: "porch-west", Zones: []string{"yard"}}, "A bear sighted in the yard"},
 	}
 	for _, c := range cases {
 		if got := Describe(c.e); got != c.want {
