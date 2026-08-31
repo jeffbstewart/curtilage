@@ -33,7 +33,11 @@ The policy engine folds people and dogs moving about into one
 label, the zones in order, every camera), described in one sentence
 that improves as it goes -- "Person on the porch" becoming "2 persons
 and a dog started on the porch, moved to the yard, then the driveway
-(1m25s)"; cars and the rest pass through as detections for now.
+(1m25s)".  Configured `occupancy` zones keep a parked-object ledger
+(counts from tracked objects, max across cameras, arrival dwell and
+departure grace): arrivals and departures become events, and the
+house page shows what is parked where now.  The rest passes through
+as detections.
 `GET /house/` is the in-the-house page -- the last day of events with
 the policy engine's verdict and audience for each (what was sent, or
 would have been, to whom; `?view=all` includes what was not sent,

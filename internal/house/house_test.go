@@ -52,10 +52,12 @@ func handler(t *testing.T) *Handler {
 	act.Path, act.Zones = []string{"porch", "yard"}, []string{"porch", "yard"}
 	act.EndedAt = now.Add(-7 * time.Minute)
 	st.Apply(now.Add(-7*time.Minute), policy.Change{Op: policy.OpEnded, Event: act})
+	occ := policy.NewOccupancy([]policy.Watch{{Zone: "side_parking"}})
 	return &Handler{
 		Store: st, API: &server.Server{Store: st, Keys: kr, LinkTTL: time.Hour},
 		Allow: allow, Proxies: proxies, DisplayName: "test house", Now: func() time.Time { return now },
 		Version: strings.Repeat("ab12", 10), PR: "20", Built: "2026-08-31T01:00:00Z",
+		Occupancy: occ,
 	}
 }
 

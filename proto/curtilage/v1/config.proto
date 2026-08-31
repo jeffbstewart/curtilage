@@ -28,6 +28,29 @@ message Config {
   // "America/New_York".  UTC if unset.  The zone database is built
   // into the binary, so this needs nothing from the container.
   string timezone = 8;
+  // Zones whose occupancy the household cares about (parked cars
+  // today; anything Frigate learns to see tomorrow).
+  repeated Occupancy occupancy = 9;
+}
+
+// One occupancy watch: how many <labels> are in <zone>, with
+// arrivals and departures as events and the count as presence.
+// Frigate publishes no per-zone counts on our install, so the ledger
+// is built from tracked objects: a parked car is one multi-hour
+// track, and its track ending IS the departure signal -- but tracks
+// flap during maneuvering and drop out under occlusion, hence the
+// two timers.
+message Occupancy {
+  // Frigate zone name, e.g. "side_parking".
+  string zone = 1;
+  // Object labels counted there; ["car"] if empty.
+  repeated string labels = 2;
+  // An object must hold the zone this long before it counts (kills
+  // the one-second maneuvering flaps); 60s if unset.
+  google.protobuf.Duration arrive_after = 3;
+  // The count must stay down this long before a departure is
+  // believed (occlusion and night dropouts are shorter); 5m if unset.
+  google.protobuf.Duration depart_after = 4;
 }
 
 // The in-the-house page, GET /house/: the last day of events with the

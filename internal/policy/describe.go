@@ -17,6 +17,34 @@ import (
 //	2 persons and a dog started on the porch, moved to the yard
 //	2 persons and a dog started on the porch, moved to the yard, then the driveway (1m25s)
 func Describe(e Event) string {
+	switch e.Kind {
+	case KindArrival, KindDeparture:
+		zone := ""
+		if len(e.Zones) > 0 {
+			zone = " " + at(e.Zones[0])
+		}
+		n := e.Objects[e.Label]
+		if e.Kind == KindArrival {
+			s := fmt.Sprintf("A %s arrived%s", e.Label, zone)
+			if n > 1 {
+				s += fmt.Sprintf(" (%d present)", n)
+			}
+			return capitalize(s)
+		}
+		if len(e.Zones) > 0 {
+			zone = " the " + place(e.Zones[0])
+		}
+		s := fmt.Sprintf("A %s left%s", e.Label, zone)
+		switch n {
+		case 0:
+			s += " (empty now)"
+		case 1:
+			s += " (1 remains)"
+		default:
+			s += fmt.Sprintf(" (%d remain)", n)
+		}
+		return capitalize(s)
+	}
 	if e.Kind != KindActivity {
 		s := e.Label
 		if e.SubLabel != "" {

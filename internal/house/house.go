@@ -44,6 +44,9 @@ type Handler struct {
 	// time): the corner badge that ends "which build am I looking
 	// at?" for good.
 	Version, PR, Built string
+	// Occupancy, when set, renders the presence strip: what is parked
+	// where, right now.
+	Occupancy *policy.Occupancy
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
 }
@@ -165,6 +168,13 @@ type page struct {
 	ByAudience  []count
 	ByVerdict   []count
 	Badge       buildBadge
+	// Presence is the occupancy strip: one line per watched
+	// (zone, label) ledger.
+	Presence []presenceLine
+}
+
+type presenceLine struct {
+	Zone, State string
 }
 
 type count struct {
@@ -240,6 +250,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		token = next
 	}
 	p.ByAudience, p.ByVerdict = counts(audiences), counts(verdicts)
+	if h.Occupancy != nil {
+		for _, zs := range h.Occupancy.Presence() {
+			line := presenceLine{Zone: strings.ReplaceAll(zs.Zone, "_", " ")}
+			switch {
+			case zs.Count == 0 && zs.LastSeen.IsZero():
+				line.State = "empty"
+			case zs.Count == 0:
+				line.State = "empty (last " + zs.Label + " seen " + zs.LastSeen.In(h.loc()).Format("Mon 15:04") + ")"
+			default:
+				line.State = fmt.Sprintf("%d %s(s) since %s, last seen %s", zs.Count, zs.Label,
+					zs.Since.In(h.loc()).Format("Mon 15:04"), zs.LastSeen.In(h.loc()).Format("Mon 15:04"))
+			}
+			p.Presence = append(p.Presence, line)
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -340,6 +365,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 <div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
 {{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
 <div class="sum">
+ {{if .Presence}}<div><b>Parked</b>{{range .Presence}}{{.Zone}}: {{.State}}<br>{{end}}</div>{{end}}
  <div><b>By audience</b>{{range .ByAudience}}{{.Name}}: {{.N}}<br>{{end}}</div>
  <div><b>By verdict</b>{{range .ByVerdict}}{{.Name}}: {{.N}}<br>{{end}}</div>
 </div>
