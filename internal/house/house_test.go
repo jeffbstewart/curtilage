@@ -153,7 +153,7 @@ func TestPageViews(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("event page -> %d", code)
 	}
-	for _, want := range []string{"Person and a dog started on the porch", "porch-west", "porch-east", "<video", "spans", "follow"} {
+	for _, want := range []string{"Person and a dog started on the porch", "porch-west", "porch-east", "<video", "const spans", "red outline"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("event page lacks %q", want)
 		}

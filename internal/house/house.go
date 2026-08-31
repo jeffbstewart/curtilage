@@ -337,9 +337,10 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 // event serves /house/event/<id>: the one thing that happened, with
 // every involved camera's clip of the SAME absolute window -- which
 // is what makes the panes time-synchronized without any server work.
-// Grid shows them all; follow shows the camera whose sighting covers
-// the playback moment (the spans are the switching signal); clicking
-// a pane pins it.
+// One bar plays, pauses and scrubs them all; clicking a pane enlarges
+// it.  (A follow-the-best-camera mode was tried and retired: the
+// hand-off heuristic was not ready.  The sighting spans stay in the
+// API for the app to try again.)
 func (h *Handler) event(w http.ResponseWriter, id string) {
 	e, ok := h.Store.Get(id)
 	if !ok {
@@ -390,7 +391,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		}
 	}
 	// Spans as seconds relative to the clip window's start (start-5s),
-	// so they line up with video playback time.
+	// so they line up with playback time.  They drive nothing but the
+	// red outline: a preview of follow-the-action that shows exactly
+	// where the heuristic would be wrong.
 	clipStart := e.StartedAt.Add(-5 * time.Second)
 	type spanJSON struct {
 		C string  `json:"c"`
@@ -404,14 +407,13 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 			se = end
 		}
 		if !se.After(clipStart) {
-			continue // over before the clip window opens: never the best camera
+			continue // over before the clip window opens
 		}
 		spans = append(spans, spanJSON{C: sp.Camera, S: sp.Start.Sub(clipStart).Seconds(), E: se.Sub(clipStart).Seconds()})
 	}
+	p.SpansJSON = template.JS("[]")
 	if b, err := json.Marshal(spans); err == nil {
 		p.SpansJSON = template.JS(b)
-	} else {
-		p.SpansJSON = template.JS("[]")
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -435,25 +437,18 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: .75rem; }
  .pane { position: relative; border: 3px solid transparent; border-radius: 6px; overflow: hidden; background: #000; cursor: pointer; }
  .pane.active { border-color: #b00; }
- .pane.pinned { border-color: #06c; }
+ .pane.big { grid-column: 1 / -1; border-color: #06c; }
  .pane .cam { position: absolute; top: .3rem; left: .5rem; color: #fff; text-shadow: 0 0 4px #000; font-weight: 600; }
  .pane video { width: 100%; display: block; }
- /* Follow: the active camera large, the rest a filmstrip of live
-    thumbnails.  Never display:none -- browsers pause hidden media,
-    which freezes the master clock and kills the handoffs. */
- body.follow .grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
- body.follow .pane { flex: 0 0 140px; }
- body.follow .pane.show { flex: 1 1 100%; order: -1; }
  ul.hist { color: #666; }
  a { color: #06c; }
 </style>
 <h1>{{.What}}</h1>
-<div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. <a href="/house/">back to the house</a></div>
+<div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where a follow-the-action view would look right now -- a preview that shows exactly where it is wrong. <a href="/house/">back to the house</a></div>
 <div class="bar">
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
- <button id="mode">follow</button>
 </div>
 <div class="grid" id="grid">
 {{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video autoplay preload="auto" muted playsinline src="{{.Src}}"></video></div>
@@ -464,34 +459,29 @@ const spans = {{.SpansJSON}};
 const panes = [...document.querySelectorAll('.pane')];
 const vids = panes.map(p => p.querySelector('video'));
 const seek = document.getElementById('seek'), play = document.getElementById('play'),
-      clock = document.getElementById('clock'), mode = document.getElementById('mode');
-let pinned = null, scrubbing = false;
+      clock = document.getElementById('clock');
+let scrubbing = false;
+function best(t) {
+  let c = null, s = -1;
+  for (const sp of spans) if (sp.s <= t && t <= sp.e && sp.s > s) { c = sp.c; s = sp.s; }
+  return c;
+}
 function dur() { return Math.max(...vids.map(v => v.duration || 0), 1); }
 function fmt(t) { t = Math.floor(t); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); }
 // The master clock is the furthest-ahead video: robust against any
 // one pane loading slowly or being throttled.
 function master() { return Math.max(...vids.map(v => v.currentTime || 0), 0); }
 function playing() { return vids.some(v => !v.paused && !v.ended); }
-function best(t) {
-  if (pinned) return pinned;
-  let c = null, s = -1;
-  for (const sp of spans) if (sp.s <= t && t <= sp.e && sp.s > s &&
-      panes.some(p => p.dataset.cam === sp.c)) { c = sp.c; s = sp.s; }
-  return c || (panes[0] && panes[0].dataset.cam);
-}
 function paint() {
   const t = master();
   if (!scrubbing) { seek.max = dur(); seek.value = t; }
   clock.textContent = fmt(t) + ' / ' + fmt(dur());
   play.textContent = playing() ? 'pause' : 'play';
   const b = best(t);
-  panes.forEach((p, i) => {
-    p.classList.toggle('active', p.dataset.cam === b);
-    p.classList.toggle('show', p.dataset.cam === b);
-    p.classList.toggle('pinned', p.dataset.cam === pinned);
-    // Drag stragglers back to the master clock and restart anything
-    // the browser decided to stop.
-    const v = vids[i];
+  panes.forEach(p => p.classList.toggle('active', p.dataset.cam === b));
+  // Time sync is the whole game: drag stragglers back to the master
+  // clock and restart anything the browser decided to stop.
+  vids.forEach(v => {
     if (playing() && !v.ended) {
       if (v.paused) { v.currentTime = t; v.play().catch(() => {}); }
       else if (!v.seeking && Math.abs(v.currentTime - t) > 0.5) v.currentTime = t;
@@ -504,11 +494,7 @@ play.onclick = () => {
 };
 seek.oninput = () => { scrubbing = true; vids.forEach(v => { v.currentTime = +seek.value; }); };
 seek.onchange = () => { scrubbing = false; };
-mode.onclick = () => {
-  document.body.classList.toggle('follow');
-  mode.textContent = document.body.classList.contains('follow') ? 'grid' : 'follow';
-};
-panes.forEach(p => p.onclick = () => { pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; paint(); });
+panes.forEach(p => p.onclick = () => p.classList.toggle('big'));
 setInterval(paint, 200);
 </script>
 `))

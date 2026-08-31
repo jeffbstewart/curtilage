@@ -40,8 +40,10 @@ would have been, to whom; `?view=all` includes what was not sent,
 `?hours=N` widens the window) -- served only to `house.allow_cidrs`,
 with `X-Forwarded-For` believed only from `house.trusted_proxies`.
 Each activity's sentence links to `/house/event/<id>`: every involved
-camera's clip of the same absolute window, time-synchronized, in a
-grid or in a follow-the-action mode driven by the sighting spans.
+camera's clip of the same absolute window, time-synchronized, one bar
+driving them all; click a pane to enlarge it.  A red outline previews
+where a follow-the-action view would look, driven by the sighting
+spans -- display only, so its mistakes are visible in place.
 It is the tool the rules are tuned with.  Times on it are in the
 configured `timezone` (IANA name; the zone database is compiled into
 the binary, so the container needs none).  Recordings are
