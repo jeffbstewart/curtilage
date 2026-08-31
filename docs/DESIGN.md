@@ -175,6 +175,15 @@ no-op for the house:
 - No free-text from servers through a relay; the phone renders from
   structured fields.  Per-device rate limits.  Pushes are the
   operator's signature; abuse would be the operator's violation.
+- **The relay is a private club** (decided 2026-08-31).  It accepts
+  push requests only from household servers holding a per-household
+  bearer credential the operator mints and hands out personally --
+  the capability-keyring pattern (two keys, current and prior, so
+  rotation never breaks a household; revocation is deleting a row).
+  Phones never talk to the relay, so this one gate is the whole
+  perimeter: the server being open source costs nothing, because a
+  stranger's install works entirely locally and simply cannot push.
+  Per-household rate limits ride the credential.
 
 Delivery results are synchronous and counted (`push_failures_total`),
 which is how the household learns Home Assistant -- or APNs -- is
@@ -220,7 +229,18 @@ finished clip when Frigate has cut it.
 - **Devices enroll once** (QR code on the LAN) and hold a key in the
   Keychain.  Live view, preserve and browsing require an enrolled
   device; Face ID gates the sensitive actions.  Passkeys (WebAuthn)
-  are the v2 form of the same thing.
+  are the v2 form of the same thing.  Enrollment issues the second
+  bearer token of the system (the first is server-to-relay): the
+  device's credential to its own household server.
+- **Official builds only, eventually; a human gate meanwhile.**  The
+  goal is App Attest (DeviceCheck): enrollment succeeds only for an
+  unmodified, App Store-signed instance of our app -- the honest form
+  of "built from our repo", since only our Apple account can sign the
+  bundle id.  Initially we are relaxed: a device that fails (or
+  predates) attestation lands in a human-curated approval queue and
+  the operator admits it by hand.  Never a secret embedded in the app
+  binary; anything shipped in the app is extractable and proves
+  nothing.
 - **No accounts.**  There is nothing to create or delete, which keeps
   App Store guideline 5.1.1(v) out of scope.  A household single
   sign-on is worth building only when a second service wants the same
@@ -236,6 +256,9 @@ finished clip when Frigate has cut it.
   Never committed; a dedicated non-admin HA user; Secret by ceremony.
 - **APNs key**: an Apple-account credential.  Never committed; Secret
   by ceremony.
+- **Relay household credential**: minted by the relay operator,
+  handed to a household in person, held by that household's server
+  (Secret by ceremony there); two-key rotation as capability links.
 - **Capability-link signing keys**: configured, not generated, so a
   pool of instances behind a load balancer signs and verifies alike.
   Two Secrets: `CURTILAGE_MEDIA_KEY` (current: mints and verifies) and
@@ -281,6 +304,18 @@ TestFlight internal testers (the household) need no review at all;
 external testers and the App Store do, and the in-app demo satisfies
 guideline 2.1.
 
+**Distribution** (decided 2026-08-31): an **unlisted** App Store app
+-- fully reviewed and hosted by Apple, installs never expire (no
+TestFlight 90-day treadmill), but reachable only by direct link,
+invisible to search.  **Free, no in-app purchases, no revenue, no
+LLC.**  The audience is the immediate family, plus friends at the
+operator's discretion; the enrollment QR and the relay credential are
+the club, so a leaked install link yields only an app with nothing to
+enroll against.  If by some quirk real demand appears, THAT is the
+trigger to form the LLC and open a paid cloud gateway at deliberately
+silly monthly rates -- a decision to be made then, not engineered for
+now beyond what the relay abstraction already provides.
+
 **If this goes viral** -- decisions made cheap now so they never have
 to be made expensively later:
 
@@ -295,8 +330,9 @@ to be made expensively later:
   analytics SDK, ever.  Standard-algorithm encryption still means
   answering the export question and filing the annual
   self-classification.
-- Free, forever.  Charging turns it into a business and helps
-  nothing.
+- Free, forever, for the club.  Charging turns it into a business;
+  the only version of that worth having is the demand-triggered
+  gateway above, priced to deter.
 - No accounts (above); no Frigate branding in the name or icon.
 
 ## Repository layout
