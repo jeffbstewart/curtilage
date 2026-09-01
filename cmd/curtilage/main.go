@@ -135,7 +135,8 @@ func cmdRun(args []string) error {
 	var watches []policy.Watch
 	for _, oc := range cfg.Occupancy {
 		watches = append(watches, policy.Watch{Zone: oc.GetZone(), Labels: oc.GetLabels(),
-			ArriveAfter: oc.GetArriveAfter().AsDuration(), DepartAfter: oc.GetDepartAfter().AsDuration()})
+			ArriveAfter: oc.GetArriveAfter().AsDuration(), DepartAfter: oc.GetDepartAfter().AsDuration(),
+			Quiet: oc.GetQuiet()})
 	}
 	occ := policy.NewOccupancy(watches)
 	var stateModels []policy.StateModel

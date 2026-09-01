@@ -61,6 +61,9 @@ type Event struct {
 	// Plate is LPR's read of a vehicle's license plate, when it
 	// resolved one; a known plate's friendly name lands in SubLabel.
 	Plate string
+	// Quiet is a config-driven hush (occupancy quiet): the event is
+	// tracked and listed but never announced to anyone.
+	Quiet bool
 	// Every zone the object has been in, in the order entered.
 	Zones       []string
 	Kind        Kind
@@ -109,6 +112,19 @@ func Audience(k Kind) string {
 	}
 	return "nobody"
 }
+
+// Audience is the verdict for this event: the kind's audience unless
+// the event is quiet.
+func (e Event) Audience() string {
+	if e.Quiet {
+		return "nobody (list only)"
+	}
+	return Audience(e.Kind)
+}
+
+// Sent reports whether this event goes to anyone: the kind says yes
+// and the event is not quiet.
+func (e Event) Sent() bool { return Sent(e.Kind) && !e.Quiet }
 
 // Sent reports whether an event of this kind goes to anyone.
 func Sent(k Kind) bool {

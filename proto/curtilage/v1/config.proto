@@ -79,6 +79,12 @@ message Occupancy {
   // The count must stay down this long before a departure is
   // believed (occlusion and night dropouts are shorter); 5m if unset.
   google.protobuf.Duration depart_after = 4;
+  // Quiet: keep the ledger (the Parked strip, scheduled checks) but
+  // the arrival/departure events are list-only, never announced.
+  // The bins want this: a dawn light change makes a bin detectable
+  // and it "arrives"; their interest is Sunday and Monday night, not
+  // every sunrise.
+  bool quiet = 5;
 }
 
 // The in-the-house page, GET /house/: the last day of events with the

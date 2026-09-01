@@ -274,7 +274,13 @@ type Occupancy struct {
 	ArriveAfter *durationpb.Duration `protobuf:"bytes,3,opt,name=arrive_after,json=arriveAfter,proto3" json:"arrive_after,omitempty"`
 	// The count must stay down this long before a departure is
 	// believed (occlusion and night dropouts are shorter); 5m if unset.
-	DepartAfter   *durationpb.Duration `protobuf:"bytes,4,opt,name=depart_after,json=departAfter,proto3" json:"depart_after,omitempty"`
+	DepartAfter *durationpb.Duration `protobuf:"bytes,4,opt,name=depart_after,json=departAfter,proto3" json:"depart_after,omitempty"`
+	// Quiet: keep the ledger (the Parked strip, scheduled checks) but
+	// the arrival/departure events are list-only, never announced.
+	// The bins want this: a dawn light change makes a bin detectable
+	// and it "arrives"; their interest is Sunday and Monday night, not
+	// every sunrise.
+	Quiet         bool `protobuf:"varint,5,opt,name=quiet,proto3" json:"quiet,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -335,6 +341,13 @@ func (x *Occupancy) GetDepartAfter() *durationpb.Duration {
 		return x.DepartAfter
 	}
 	return nil
+}
+
+func (x *Occupancy) GetQuiet() bool {
+	if x != nil {
+		return x.Quiet
+	}
+	return false
 }
 
 // The in-the-house page, GET /house/: the last day of events with the
@@ -680,12 +693,13 @@ const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\valarm_class\x18\x04 \x01(\tR\n" +
 	"alarmClass\x12:\n" +
 	"\valarm_after\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\n" +
-	"alarmAfter\"\xb3\x01\n" +
+	"alarmAfter\"\xc9\x01\n" +
 	"\tOccupancy\x12\x12\n" +
 	"\x04zone\x18\x01 \x01(\tR\x04zone\x12\x16\n" +
 	"\x06labels\x18\x02 \x03(\tR\x06labels\x12<\n" +
 	"\farrive_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\varriveAfter\x12<\n" +
-	"\fdepart_after\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\vdepartAfter\"Q\n" +
+	"\fdepart_after\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\vdepartAfter\x12\x14\n" +
+	"\x05quiet\x18\x05 \x01(\bR\x05quiet\"Q\n" +
 	"\x05House\x12\x1f\n" +
 	"\vallow_cidrs\x18\x01 \x03(\tR\n" +
 	"allowCidrs\x12'\n" +
