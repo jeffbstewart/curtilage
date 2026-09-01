@@ -239,13 +239,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if e.Running() {
 				p.Live++
 			}
-			audiences[policy.Audience(e.Kind)]++
+			audiences[e.Audience()]++
 			verdicts[e.Kind.String()]++
 			// No zone, no interest -- for DETECTIONS: an unzoned one is
 			// the street's traffic, hidden even from the everything
 			// view.  Kinds the policy engine already vouched for
 			// (sightings, states) are news wherever they happened.
-			if (e.Kind == policy.KindDetection && len(e.Zones) == 0) || (!all && !policy.Sent(e.Kind)) {
+			if (e.Kind == policy.KindDetection && len(e.Zones) == 0) || (!all && !e.Sent()) {
 				p.Hidden++
 				continue
 			}
@@ -303,7 +303,7 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 		Label:    e.Label,
 		Zones:    strings.Join(e.Zones, ", "),
 		Verdict:  e.Kind.String(),
-		Audience: policy.Audience(e.Kind),
+		Audience: e.Audience(),
 		Clip:     e.Clip.String(),
 		Live:     e.Running(),
 		SourceID: e.SourceID,

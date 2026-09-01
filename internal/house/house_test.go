@@ -56,6 +56,10 @@ func handler(t *testing.T) *Handler {
 	bear := policy.Event{ID: "bear", Camera: "backyard-gate", Label: "bear", Kind: policy.KindSighting,
 		StartedAt: now.Add(-20 * time.Minute), EndedAt: now.Add(-19 * time.Minute), HasSnapshot: true, SourceID: "src-bear"}
 	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: bear})
+	// A quiet arrival (a bin's ledger event): listed, never sent.
+	bin := ev("bin-arr", policy.KindArrival, 30*time.Minute, false)
+	bin.Label, bin.Zones, bin.Quiet = "waste_bin", []string{"recycling"}, true
+	st.Apply(now, policy.Change{Op: policy.OpEnded, Event: bin})
 	occ := policy.NewOccupancy([]policy.Watch{{Zone: "side_parking"}})
 	sts := policy.NewStates([]policy.StateModel{{Model: "bmw_garage_door", Hold: 20 * time.Second}})
 	sts.Observe(now.Add(-2*time.Hour), "frigate/garage/classification/bmw_garage_door", []byte("gmw_garage_door_closed"))
@@ -124,7 +128,7 @@ func TestPageViews(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	// Default: sent only. Window 24h: pkg-old (30h) is out.
-	for _, want := range []string{"6 events", "1 still running", "2</b> unsent or unzoned are hidden", "src-arr-new", "src-live", "household: 4", "nobody (list only): 2", "/media/", `<span class="live">live</span>`,
+	for _, want := range []string{"7 events", "1 still running", "3</b> unsent or unzoned are hidden", "src-arr-new", "src-live", "household: 4", "nobody (list only): 3", "/media/", `<span class="live">live</span>`,
 		// The unzoned bear: a sighting is shown, zone or no zone.
 		"src-bear", "A bear sighted (backyard-gate)",
 		// The activity: its final sentence, then how it evolved, newest
@@ -141,7 +145,7 @@ func TestPageViews(t *testing.T) {
 			t.Errorf("sent view lacks %q", want)
 		}
 	}
-	for _, no := range []string{"src-det-new", "src-pkg-old"} {
+	for _, no := range []string{"src-det-new", "src-pkg-old", "src-bin-arr"} {
 		if strings.Contains(body, no) {
 			t.Errorf("sent view shows %q", no)
 		}
@@ -149,6 +153,10 @@ func TestPageViews(t *testing.T) {
 	_, body = get(t, h, "192.168.1.50:1", "", "?view=all")
 	if !strings.Contains(body, "src-det-new") || !strings.Contains(body, "Showing <b>everything</b>") {
 		t.Error("all view lacks the unsent detection")
+	}
+	// The quiet arrival: hidden from the sent view above, listed here.
+	if !strings.Contains(body, "src-bin-arr") {
+		t.Error("all view lacks the quiet arrival")
 	}
 	// No zone, no interest: elided even from the everything view.
 	if strings.Contains(body, "src-det-unzoned") || !strings.Contains(body, "(1 unzoned hidden)") {

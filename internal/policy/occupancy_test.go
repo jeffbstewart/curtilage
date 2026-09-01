@@ -34,6 +34,24 @@ func TestArrivalCarriesIdentity(t *testing.T) {
 	}
 }
 
+// A quiet watch keeps its ledger but its events reach nobody: the
+// bins "arrive" every dawn when the light makes them detectable.
+func TestQuietWatch(t *testing.T) {
+	o := NewOccupancy([]Watch{{Zone: "recycling", Labels: []string{"waste_bin"},
+		ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute, Quiet: true}})
+	t0 := time.Date(2026, 9, 1, 10, 38, 42, 0, time.UTC)
+	o.Observe(t0, "frigate/events", []byte(`{"type":"new","after":{"id":"bin1","camera":"garage","label":"waste_bin",`+
+		`"start_time":1788259122,"end_time":null,"entered_zones":["recycling"],"current_zones":["recycling"],`+
+		`"has_snapshot":true,"has_clip":false,"false_positive":false,"stationary":true}}`))
+	c := o.Observe(t0.Add(61*time.Second), "frigate/x/status/detect", []byte("ON"))
+	if len(c) != 1 || !c[0].Event.Quiet || c[0].Event.Sent() || c[0].Event.Audience() != "nobody (list only)" {
+		t.Fatalf("quiet arrival: %+v", c)
+	}
+	if st := o.Presence(); st[0].Count != 1 {
+		t.Fatalf("the ledger must still count it: %+v", st)
+	}
+}
+
 func TestOccupancyRules(t *testing.T) {
 	o := NewOccupancy([]Watch{{Zone: "side_parking", ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute}})
 	t0 := time.Date(2026, 8, 30, 22, 0, 0, 0, time.UTC)

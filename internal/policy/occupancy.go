@@ -20,6 +20,11 @@ type Watch struct {
 	// DepartAfter is how long the count must stay down before a
 	// departure is believed: occlusion and night dropouts are shorter.
 	DepartAfter time.Duration
+	// Quiet keeps the ledger (Presence, scheduled checks) but makes
+	// the arrival/departure events list-only, never announced.  The
+	// bins want this: a dawn light change makes a bin detectable and
+	// it "arrives".
+	Quiet bool
 }
 
 // Occupancy is the ledger of what is parked where (docs/DESIGN.md
@@ -241,6 +246,7 @@ func (o *Occupancy) event(l *ledger, at time.Time, kind Kind) Event {
 	ev := Event{
 		ID:        MintID(fmt.Sprintf("occupancy/%s/%s/%d", l.watch.Zone, l.label, at.UnixNano())),
 		Kind:      kind,
+		Quiet:     l.watch.Quiet,
 		Label:     l.label,
 		Zones:     []string{l.watch.Zone},
 		Path:      []string{l.watch.Zone},
