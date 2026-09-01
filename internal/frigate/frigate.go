@@ -147,6 +147,11 @@ type Object struct {
 	HasClip       bool     `json:"has_clip"`
 	HasSnapshot   bool     `json:"has_snapshot"`
 	MaxSeverity   string   `json:"max_severity"`
+	// Plate is LPR's read of a vehicle's license plate, published as
+	// the same null / "text" / ["text", score] shapes as sub_label.
+	// A KNOWN plate (lpr.known_plates) surfaces its friendly name in
+	// SubLabel as well; this field is always the raw read.
+	Plate SubLabel `json:"recognized_license_plate"`
 }
 
 // Change is an event message's type.

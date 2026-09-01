@@ -96,6 +96,19 @@ func TestPassthroughLifecycle(t *testing.T) {
 	}
 }
 
+// A plate read arriving mid-track is a change a viewer notices.
+func TestPlateFlowsToDetection(t *testing.T) {
+	p := NewPassthrough()
+	at := time.Now()
+	p.Observe(at, "frigate/events", msg("new", "car9", "driveway-winchester", nil, false, false, 0))
+	got := p.Observe(at, "frigate/events", []byte(`{"type":"update","after":{"id":"car9","camera":"driveway-winchester","label":"car","sub_label":null,`+
+		`"start_time":1788049526.709964,"end_time":null,"entered_zones":[],"current_zones":[],"has_snapshot":false,"has_clip":false,"false_positive":false,`+
+		`"recognized_license_plate":["5CKX83",0.99]}}`))
+	if len(got) != 1 || got[0].Op != OpUpdated || got[0].Event.Plate != "5CKX83" {
+		t.Fatalf("plate update -> %+v", got)
+	}
+}
+
 // A notable label (config notable_labels) is news anywhere: its
 // track passes through as a household sighting, zone or no zone.
 func TestNotableSighting(t *testing.T) {

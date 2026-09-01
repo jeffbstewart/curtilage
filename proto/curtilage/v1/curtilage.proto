@@ -173,6 +173,10 @@ message Event {
   // follow-the-action view; all clips of one event share the same
   // absolute window, so panes are time-synchronized by construction.
   repeated CameraSpan spans = 15;
+  // A license plate read for a vehicle event ("5CKX83"), when LPR
+  // resolved one.  A known plate's friendly name ("Jeff's BMW")
+  // arrives in sub_label as well; this is always the raw read.
+  string plate = 16;
 }
 
 // One camera's sighting within an activity.
