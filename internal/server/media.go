@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -64,7 +65,7 @@ func (s *Server) GetMedia(req *curtilagev1.GetMediaRequest, stream grpc.ServerSt
 	if s.Frigate == nil {
 		return status.Error(codes.Unavailable, "media is not configured on this server (frigate.url)")
 	}
-	m, err := s.fetch(stream.Context(), req.GetEventId(), req.GetMedia(), req.GetCamera())
+	m, _, err := s.fetch(stream.Context(), req.GetEventId(), req.GetMedia(), req.GetCamera())
 	if err != nil {
 		return err
 	}
@@ -98,24 +99,25 @@ func (s *Server) GetMedia(req *curtilagev1.GetMediaRequest, stream grpc.ServerSt
 // fetch resolves an event id, media kind and optional camera to a
 // Frigate fetch, with every failure a client may see collapsed to
 // NotFound.  camera narrows a clip to one of the event's cameras; ""
-// is the leading one.
-func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Media, camera string) (*frigate.Media, error) {
+// is the leading one.  etag is non-empty only when the bytes are a
+// stable cut -- a clip of an ENDED event, whose bounds no longer move
+// -- and names that cut; a growing live clip and a snapshot (which
+// Frigate updates while the event runs) have none.
+func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Media, camera string) (m *frigate.Media, etag string, err error) {
 	e, ok := s.Store.Get(eventID)
 	if !ok {
-		return nil, status.Error(codes.NotFound, "no such event or media")
+		return nil, "", status.Error(codes.NotFound, "no such event or media")
 	}
 	if camera != "" {
 		if media != curtilagev1.Media_MEDIA_CLIP || (camera != e.Camera && !slices.Contains(e.Cameras, camera)) {
-			return nil, status.Error(codes.NotFound, "no such event or media")
+			return nil, "", status.Error(codes.NotFound, "no such event or media")
 		}
 		e.Camera = camera // this camera's view of the same window
 	}
-	var m *frigate.Media
-	var err error
 	switch media {
 	case curtilagev1.Media_MEDIA_SNAPSHOT:
 		if !e.HasSnapshot {
-			return nil, status.Error(codes.NotFound, "no such event or media")
+			return nil, "", status.Error(codes.NotFound, "no such event or media")
 		}
 		m, err = s.Frigate.Snapshot(ctx, e.SourceID)
 	case curtilagev1.Media_MEDIA_CLIP:
@@ -127,22 +129,23 @@ func (s *Server) fetch(ctx context.Context, eventID string, media curtilagev1.Me
 			end = time.Now()
 		} else {
 			end = end.Add(clipMargin)
+			etag = fmt.Sprintf("%q", fmt.Sprintf("%s-%d-%d", e.Camera, start.Unix(), end.Unix()))
 		}
 		m, err = s.Frigate.Clip(ctx, e.Camera, start, end)
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "media %v is not one this server serves", media)
+		return nil, "", status.Errorf(codes.InvalidArgument, "media %v is not one this server serves", media)
 	}
 	switch {
 	case errors.Is(err, frigate.ErrNotFound):
 		mediaFailures.Add(1)
-		return nil, status.Error(codes.NotFound, "no such event or media")
+		return nil, "", status.Error(codes.NotFound, "no such event or media")
 	case err != nil:
 		mediaFailures.Add(1)
 		log.Printf("media: %s %v: %v", eventID, media, err)
-		return nil, status.Error(codes.Unavailable, "Frigate did not answer")
+		return nil, "", status.Error(codes.Unavailable, "Frigate did not answer")
 	}
 	mediaFetches.Add(1)
-	return m, nil
+	return m, etag, nil
 }
 
 // Link mints a capability path for one piece of an event's media:
@@ -164,7 +167,9 @@ func (s *Server) CameraLink(e policy.Event, media curtilagev1.Media, camera stri
 
 // MediaHandler serves GET /media/<token>: the capability URL.  Every
 // failure is a 404 with the same body -- a probe learns nothing
-// about which part was wrong; the counters know.
+// about which part was wrong; the counters know.  Clips of ended
+// events answer Range requests (see serveRanged); live clips and
+// snapshots stream whole, since their bytes change between requests.
 func (s *Server) MediaHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -190,7 +195,7 @@ func (s *Server) MediaHandler() http.Handler {
 			return
 		}
 		linksOpened.Add(1)
-		m, err := s.fetch(r.Context(), claims.EventID, curtilagev1.Media(claims.Media), claims.Camera)
+		m, etag, err := s.fetch(r.Context(), claims.EventID, curtilagev1.Media(claims.Media), claims.Camera)
 		if err != nil {
 			if status.Code(err) == codes.Unavailable {
 				http.Error(w, "media source unavailable", http.StatusBadGateway)
@@ -203,11 +208,26 @@ func (s *Server) MediaHandler() http.Handler {
 		w.Header().Set("Content-Type", m.ContentType)
 		w.Header().Set("Cache-Control", "private, max-age="+strconv.Itoa(int(time.Until(claims.Expires)/time.Second)))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if r.Method == http.MethodHead {
+			if etag != "" {
+				w.Header().Set("ETag", etag)
+				w.Header().Set("Accept-Ranges", "bytes")
+			}
+			if m.Size >= 0 {
+				w.Header().Set("Content-Length", strconv.FormatInt(m.Size, 10))
+			}
+			return
+		}
+		if etag != "" && serveRanged(w, r, etag, m.Body) {
+			return
+		}
+		// Unstable bytes (a live clip grows, a snapshot updates while
+		// the event runs) -- a byte range could splice two different
+		// files, so refuse ranges and stream whole.  Also the fallback
+		// when no spool file could be made.
+		w.Header().Set("Accept-Ranges", "none")
 		if m.Size >= 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(m.Size, 10))
-		}
-		if r.Method == http.MethodHead {
-			return
 		}
 		n, err := io.Copy(w, m.Body)
 		mediaBytes.Add(uint64(n))
@@ -215,6 +235,43 @@ func (s *Server) MediaHandler() http.Handler {
 			mediaFailures.Add(1)
 		}
 	})
+}
+
+// serveRanged spools one stable clip cut to a temp file and serves it
+// with http.ServeContent: Range requests are how a browser reads mp4
+// metadata and seeks without downloading the whole clip, and the
+// spool is what makes Frigate's one-way stream seekable and the
+// Content-Length exact.  The etag names the cut (camera and bounds,
+// which Frigate re-cuts to the same recording bytes), so a client
+// resuming with If-Range never splices bytes from a different cut.
+// Returns false when no spool file could be made -- the caller
+// streams instead; every other outcome is answered here.
+func serveRanged(w http.ResponseWriter, r *http.Request, etag string, body io.Reader) bool {
+	f, err := os.CreateTemp("", "curtilage-media-*")
+	if err != nil {
+		log.Printf("media: spool: %v", err)
+		return false
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if _, err := io.Copy(f, body); err != nil {
+		mediaFailures.Add(1)
+		http.Error(w, "media source unavailable", http.StatusBadGateway)
+		return true
+	}
+	w.Header().Set("ETag", etag)
+	http.ServeContent(&countingWriter{ResponseWriter: w}, r, "", time.Time{}, f)
+	return true
+}
+
+// countingWriter feeds the bytes ServeContent actually sends into
+// mediaBytes, the served-volume counter.
+type countingWriter struct{ http.ResponseWriter }
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.ResponseWriter.Write(p)
+	mediaBytes.Add(uint64(n))
+	return n, err
 }
 
 // String form for logs.

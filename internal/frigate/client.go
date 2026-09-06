@@ -33,7 +33,14 @@ func NewClient(base string) (*Client, error) {
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawQuery, u.Fragment = "", ""
-	return &Client{base: u, http: &http.Client{Timeout: 30 * time.Second}}, nil
+	// No http.Client.Timeout: it covers reading the whole body, and a
+	// long clip legitimately streams for minutes.  Cap the time to
+	// response headers instead (Frigate cutting the clip); the body is
+	// bounded by the caller's context -- the browser hanging up cancels
+	// the copy -- and by the reverse proxy's server timeout.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = 30 * time.Second
+	return &Client{base: u, http: &http.Client{Transport: tr}}, nil
 }
 
 // Media is one fetched piece of media; the caller closes Body.
