@@ -255,6 +255,24 @@ func TestMediaHandlerRangesOnEndedClip(t *testing.T) {
 		}
 	}
 
+	// With every spool slot busy, the same link degrades to a plain
+	// stream: 200, whole body, no range offer.
+	for range cap(spoolSlots) {
+		spoolSlots <- struct{}{}
+	}
+	busy, err := http.Get(web.URL + link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bb, _ := io.ReadAll(busy.Body)
+	busy.Body.Close()
+	for range cap(spoolSlots) {
+		<-spoolSlots
+	}
+	if busy.StatusCode != 200 || busy.Header.Get("Accept-Ranges") != "none" || busy.Header.Get("ETag") != "" || !bytes.Equal(bb, body) {
+		t.Errorf("busy slots -> %d %v %d bytes", busy.StatusCode, busy.Header, len(bb))
+	}
+
 	// The live event's clip refuses ranges: bytes that grow between
 	// requests cannot be spliced, so the Range header is ignored.
 	live, _ := s.Store.Get("with")

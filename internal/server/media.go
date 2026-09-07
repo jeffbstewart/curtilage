@@ -237,6 +237,13 @@ func (s *Server) MediaHandler() http.Handler {
 	})
 }
 
+// spoolSlots bounds how many spool files exist at once: a multi-pane
+// event page opens one clip per camera, so a slot per camera with
+// room for a second viewer.  When every slot is busy the next request
+// streams instead (serveRanged returns false) -- degraded, never
+// queued.
+var spoolSlots = make(chan struct{}, 16)
+
 // serveRanged spools one stable clip cut to a temp file and serves it
 // with http.ServeContent: Range requests are how a browser reads mp4
 // metadata and seeks without downloading the whole clip, and the
@@ -244,16 +251,31 @@ func (s *Server) MediaHandler() http.Handler {
 // Content-Length exact.  The etag names the cut (camera and bounds,
 // which Frigate re-cuts to the same recording bytes), so a client
 // resuming with If-Range never splices bytes from a different cut.
-// Returns false when no spool file could be made -- the caller
-// streams instead; every other outcome is answered here.
+// Returns false when no spool file could be made or every spool slot
+// is busy -- the caller streams instead; every other outcome is
+// answered here.
 func serveRanged(w http.ResponseWriter, r *http.Request, etag string, body io.Reader) bool {
+	select {
+	case spoolSlots <- struct{}{}:
+		defer func() { <-spoolSlots }()
+	default:
+		return false
+	}
 	f, err := os.CreateTemp("", "curtilage-media-*")
 	if err != nil {
 		log.Printf("media: spool: %v", err)
 		return false
 	}
-	defer os.Remove(f.Name())
 	defer f.Close()
+	// Unlink at birth: the open fd keeps the bytes readable and the
+	// kernel reclaims them when it closes, so no spool outlives its
+	// request -- not even through a crash.  (Windows dev boxes honor
+	// this too: Go opens with FILE_SHARE_DELETE and modern NTFS
+	// deletes POSIX-style.)
+	if err := os.Remove(f.Name()); err != nil {
+		log.Printf("media: spool unlink: %v", err)
+		defer os.Remove(f.Name()) // second try on the way out
+	}
 	if _, err := io.Copy(f, body); err != nil {
 		mediaFailures.Add(1)
 		http.Error(w, "media source unavailable", http.StatusBadGateway)
