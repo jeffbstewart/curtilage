@@ -126,7 +126,7 @@ func (r *Registry) Enroll(secret, name string, now time.Time) (Device, string, e
 	d := &curtilagev1.DeviceState{
 		Id:          randToken(6),
 		Name:        name,
-		TokenSha256: hashToken(token),
+		TokenSha256: HashToken(token),
 		EnrolledAt:  timestamppb.New(now),
 		LastSeen:    timestamppb.New(now),
 	}
@@ -140,7 +140,7 @@ func (r *Registry) Enroll(secret, name string, now time.Time) (Device, string, e
 // Authenticate reports whether token belongs to an unrevoked device,
 // and remembers roughly when it was last seen.
 func (r *Registry) Authenticate(token string, now time.Time) (Device, bool) {
-	h := hashToken(token)
+	h := HashToken(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	d := r.lookup(h)
@@ -159,7 +159,7 @@ func (r *Registry) Authenticate(token string, now time.Time) (Device, bool) {
 // already revoked token (an unarmed registry's pass-through) is a
 // quiet no-op.
 func (r *Registry) Forget(token string, now time.Time) {
-	h := hashToken(token)
+	h := HashToken(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if d := r.lookup(h); d != nil && !d.Revoked {
@@ -236,7 +236,9 @@ func randToken(n int) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func hashToken(token string) string {
+// HashToken is the hex SHA-256 a token is stored and named by:
+// what the registry file holds, and what ForgetRequest presents.
+func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }

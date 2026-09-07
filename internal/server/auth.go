@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
+	"github.com/jeffbstewart/curtilage/internal/devices"
 )
 
 // ProtocolVersion is the wire protocol Hello negotiates.  Bump it
@@ -61,15 +62,25 @@ func (s *Server) Enroll(ctx context.Context, req *curtilagev1.EnrollRequest) (*c
 }
 
 // Forget revokes the calling device's own registration.  The
-// interceptor has already authenticated the bearer (or, unarmed,
-// waved the call through -- then there is nothing to forget and this
-// is a no-op).
+// interceptor has already authenticated the bearer; the request must
+// ALSO name the registration by its token hash -- an innocent
+// misdirected message must never delete a credential, so an empty or
+// mismatched body is refused, not honoured.  Unarmed (the
+// interceptor waved the call through with no bearer), there is
+// nothing to forget and nothing to confirm: a quiet no-op.
 func (s *Server) Forget(ctx context.Context, req *curtilagev1.ForgetRequest) (*curtilagev1.ForgetResponse, error) {
-	if s.Devices != nil {
-		if token, ok := bearer(ctx); ok {
-			s.Devices.Forget(token, time.Now())
-		}
+	if s.Devices == nil {
+		return &curtilagev1.ForgetResponse{}, nil
 	}
+	token, ok := bearer(ctx)
+	if !ok {
+		return &curtilagev1.ForgetResponse{}, nil // unarmed pass-through
+	}
+	if req.GetTokenSha256() != devices.HashToken(token) {
+		return nil, status.Error(codes.InvalidArgument,
+			"forget must name the registration: token_sha256 is the hex SHA-256 of the calling device's own token")
+	}
+	s.Devices.Forget(token, time.Now())
 	return &curtilagev1.ForgetResponse{}, nil
 }
 

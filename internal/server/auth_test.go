@@ -75,14 +75,26 @@ func TestAuthLifecycle(t *testing.T) {
 	}
 
 	// Forget is authenticated like everything else: cold and nonsense
-	// credentials are turned away, the real one revokes itself.
+	// credentials are turned away.
 	if _, err := c.Forget(ctx, &curtilagev1.ForgetRequest{}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("cold forget -> %v", err)
 	}
 	if _, err := c.Forget(authed(ctx, "nonsense"), &curtilagev1.ForgetRequest{}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("nonsense forget -> %v", err)
 	}
-	if _, err := c.Forget(authed(ctx, enr.GetToken()), &curtilagev1.ForgetRequest{}); err != nil {
+	// And it must NAME the registration: an authenticated but empty or
+	// mismatched body (a misdirected message) is refused, not honoured.
+	good := authed(ctx, enr.GetToken())
+	if _, err := c.Forget(good, &curtilagev1.ForgetRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("empty-body forget -> %v", err)
+	}
+	if _, err := c.Forget(good, &curtilagev1.ForgetRequest{TokenSha256: "deadbeef"}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("mismatched forget -> %v", err)
+	}
+	if _, err := c.ListEvents(good, &curtilagev1.ListEventsRequest{}); err != nil {
+		t.Fatalf("refused forgets must not revoke: %v", err)
+	}
+	if _, err := c.Forget(good, &curtilagev1.ForgetRequest{TokenSha256: devices.HashToken(enr.GetToken())}); err != nil {
 		t.Fatalf("real forget: %v", err)
 	}
 	// The only device is gone: unarmed again, open again.

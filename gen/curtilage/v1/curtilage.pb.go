@@ -546,7 +546,14 @@ func (x *EnrollResponse) GetDeviceId() string {
 }
 
 type ForgetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The hex SHA-256 of the calling device's own bearer token.  An
+	// empty message to a destructive endpoint is a wrong-endpoint
+	// footgun: an innocent misdirected request must not delete a
+	// credential, so the caller proves it means THIS registration by
+	// naming it -- the server checks the hash against the
+	// authenticated device and refuses a mismatch.
+	TokenSha256   string `protobuf:"bytes,1,opt,name=token_sha256,json=tokenSha256,proto3" json:"token_sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -579,6 +586,13 @@ func (x *ForgetRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ForgetRequest.ProtoReflect.Descriptor instead.
 func (*ForgetRequest) Descriptor() ([]byte, []int) {
 	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ForgetRequest) GetTokenSha256() string {
+	if x != nil {
+		return x.TokenSha256
+	}
+	return ""
 }
 
 type ForgetResponse struct {
@@ -1718,8 +1732,9 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"deviceName\"C\n" +
 	"\x0eEnrollResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1b\n" +
-	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\"\x0f\n" +
-	"\rForgetRequest\"\x10\n" +
+	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\"2\n" +
+	"\rForgetRequest\x12!\n" +
+	"\ftoken_sha256\x18\x01 \x01(\tR\vtokenSha256\"\x10\n" +
 	"\x0eForgetResponse\"\x81\x01\n" +
 	"\x14GetServerInfoRequest\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\rR\n" +

@@ -102,7 +102,15 @@ message EnrollResponse {
   string device_id = 2;
 }
 
-message ForgetRequest {}
+message ForgetRequest {
+  // The hex SHA-256 of the calling device's own bearer token.  An
+  // empty message to a destructive endpoint is a wrong-endpoint
+  // footgun: an innocent misdirected request must not delete a
+  // credential, so the caller proves it means THIS registration by
+  // naming it -- the server checks the hash against the
+  // authenticated device and refuses a mismatch.
+  string token_sha256 = 1;
+}
 
 message ForgetResponse {}
 
