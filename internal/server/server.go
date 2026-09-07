@@ -20,6 +20,7 @@ import (
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/captoken"
+	"github.com/jeffbstewart/curtilage/internal/devices"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
 	"github.com/jeffbstewart/curtilage/internal/mediacache"
 	"github.com/jeffbstewart/curtilage/internal/policy"
@@ -53,6 +54,9 @@ type Server struct {
 	// share one Frigate fetch each; nil serves every request straight
 	// from Frigate as before.
 	Cache *mediacache.Cache
+	// Devices is the enrolled-device registry (auth.go); nil means no
+	// enrollment and no enforcement (replay mode).
+	Devices *devices.Registry
 
 	// Frigate's per-camera detect resolutions -- the pixel space box
 	// samples are in -- fetched lazily (DetectDims).

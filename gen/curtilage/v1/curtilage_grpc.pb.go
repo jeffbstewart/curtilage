@@ -36,6 +36,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	CurtilageService_Hello_FullMethodName         = "/curtilage.v1.CurtilageService/Hello"
+	CurtilageService_Enroll_FullMethodName        = "/curtilage.v1.CurtilageService/Enroll"
+	CurtilageService_Forget_FullMethodName        = "/curtilage.v1.CurtilageService/Forget"
 	CurtilageService_GetServerInfo_FullMethodName = "/curtilage.v1.CurtilageService/GetServerInfo"
 	CurtilageService_ListCameras_FullMethodName   = "/curtilage.v1.CurtilageService/ListCameras"
 	CurtilageService_ListEvents_FullMethodName    = "/curtilage.v1.CurtilageService/ListEvents"
@@ -47,9 +50,28 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CurtilageServiceClient interface {
+	// The unauthenticated door (docs/DESIGN.md "gRPC authentication"):
+	// which protocol versions this server speaks and how a caller may
+	// authenticate, and NOTHING else -- an unauthenticated caller does
+	// not learn whose house this is.  Everything below except Enroll
+	// requires a device's bearer token in `authorization` metadata once
+	// any device is enrolled.
+	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
+	// Enroll trades a one-use enrollment secret (minted inside the
+	// admin's passkey session, carried in a QR) for this device's
+	// long-lived bearer token.  Unauthenticated: the secret is the
+	// authority.
+	Enroll(ctx context.Context, in *EnrollRequest, opts ...grpc.CallOption) (*EnrollResponse, error)
+	// Forget revokes the calling device's own registration -- a phone
+	// being wiped or handed on kills its token without waiting for the
+	// admin.  Authenticated like everything else: with no valid
+	// credential there is nothing to forget, and the app's "sign out
+	// always works" lives client-side (delete the Keychain entry;
+	// treat Unauthenticated as already gone).
+	Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*ForgetResponse, error)
 	// Handshake, both ways: the client says what it is, the server says
 	// what it offers, and either side can conclude the other is too old
-	// before anything else is asked.
+	// before anything else is asked.  Authenticated: it names the house.
 	GetServerInfo(ctx context.Context, in *GetServerInfoRequest, opts ...grpc.CallOption) (*GetServerInfoResponse, error)
 	// The cameras this installation has, as the household named them.
 	ListCameras(ctx context.Context, in *ListCamerasRequest, opts ...grpc.CallOption) (*ListCamerasResponse, error)
@@ -71,6 +93,36 @@ type curtilageServiceClient struct {
 
 func NewCurtilageServiceClient(cc grpc.ClientConnInterface) CurtilageServiceClient {
 	return &curtilageServiceClient{cc}
+}
+
+func (c *curtilageServiceClient) Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HelloResponse)
+	err := c.cc.Invoke(ctx, CurtilageService_Hello_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *curtilageServiceClient) Enroll(ctx context.Context, in *EnrollRequest, opts ...grpc.CallOption) (*EnrollResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnrollResponse)
+	err := c.cc.Invoke(ctx, CurtilageService_Enroll_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *curtilageServiceClient) Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*ForgetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForgetResponse)
+	err := c.cc.Invoke(ctx, CurtilageService_Forget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *curtilageServiceClient) GetServerInfo(ctx context.Context, in *GetServerInfoRequest, opts ...grpc.CallOption) (*GetServerInfoResponse, error) {
@@ -145,9 +197,28 @@ type CurtilageService_GetMediaClient = grpc.ServerStreamingClient[GetMediaRespon
 // All implementations must embed UnimplementedCurtilageServiceServer
 // for forward compatibility.
 type CurtilageServiceServer interface {
+	// The unauthenticated door (docs/DESIGN.md "gRPC authentication"):
+	// which protocol versions this server speaks and how a caller may
+	// authenticate, and NOTHING else -- an unauthenticated caller does
+	// not learn whose house this is.  Everything below except Enroll
+	// requires a device's bearer token in `authorization` metadata once
+	// any device is enrolled.
+	Hello(context.Context, *HelloRequest) (*HelloResponse, error)
+	// Enroll trades a one-use enrollment secret (minted inside the
+	// admin's passkey session, carried in a QR) for this device's
+	// long-lived bearer token.  Unauthenticated: the secret is the
+	// authority.
+	Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error)
+	// Forget revokes the calling device's own registration -- a phone
+	// being wiped or handed on kills its token without waiting for the
+	// admin.  Authenticated like everything else: with no valid
+	// credential there is nothing to forget, and the app's "sign out
+	// always works" lives client-side (delete the Keychain entry;
+	// treat Unauthenticated as already gone).
+	Forget(context.Context, *ForgetRequest) (*ForgetResponse, error)
 	// Handshake, both ways: the client says what it is, the server says
 	// what it offers, and either side can conclude the other is too old
-	// before anything else is asked.
+	// before anything else is asked.  Authenticated: it names the house.
 	GetServerInfo(context.Context, *GetServerInfoRequest) (*GetServerInfoResponse, error)
 	// The cameras this installation has, as the household named them.
 	ListCameras(context.Context, *ListCamerasRequest) (*ListCamerasResponse, error)
@@ -171,6 +242,15 @@ type CurtilageServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCurtilageServiceServer struct{}
 
+func (UnimplementedCurtilageServiceServer) Hello(context.Context, *HelloRequest) (*HelloResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Hello not implemented")
+}
+func (UnimplementedCurtilageServiceServer) Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Enroll not implemented")
+}
+func (UnimplementedCurtilageServiceServer) Forget(context.Context, *ForgetRequest) (*ForgetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Forget not implemented")
+}
 func (UnimplementedCurtilageServiceServer) GetServerInfo(context.Context, *GetServerInfoRequest) (*GetServerInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetServerInfo not implemented")
 }
@@ -205,6 +285,60 @@ func RegisterCurtilageServiceServer(s grpc.ServiceRegistrar, srv CurtilageServic
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&CurtilageService_ServiceDesc, srv)
+}
+
+func _CurtilageService_Hello_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HelloRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CurtilageServiceServer).Hello(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CurtilageService_Hello_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CurtilageServiceServer).Hello(ctx, req.(*HelloRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CurtilageService_Enroll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnrollRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CurtilageServiceServer).Enroll(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CurtilageService_Enroll_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CurtilageServiceServer).Enroll(ctx, req.(*EnrollRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CurtilageService_Forget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CurtilageServiceServer).Forget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CurtilageService_Forget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CurtilageServiceServer).Forget(ctx, req.(*ForgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _CurtilageService_GetServerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -290,6 +424,18 @@ var CurtilageService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "curtilage.v1.CurtilageService",
 	HandlerType: (*CurtilageServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Hello",
+			Handler:    _CurtilageService_Hello_Handler,
+		},
+		{
+			MethodName: "Enroll",
+			Handler:    _CurtilageService_Enroll_Handler,
+		},
+		{
+			MethodName: "Forget",
+			Handler:    _CurtilageService_Forget_Handler,
+		},
 		{
 			MethodName: "GetServerInfo",
 			Handler:    _CurtilageService_GetServerInfo_Handler,

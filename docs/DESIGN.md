@@ -263,11 +263,15 @@ and notifications are a separate conversation.
   layer on in the App Attest era without discarding any of this.
 - **Everything requires the token except an explicit short list**:
   `Hello` (new; protocol versions and supported auth methods, nothing
-  more -- `GetServerInfo` names the house and stays authenticated),
-  `Enroll` (authorised by the QR's one-time secret), and `Logout`,
-  which succeeds with or without a valid credential -- a revoked
-  device saying goodbye is a no-op success, never an error.  Full
-  capability discovery happens after authentication.
+  more -- `GetServerInfo` names the house and stays authenticated)
+  and `Enroll` (authorised by the QR's one-time secret).  Full
+  capability discovery happens after authentication.  (Revised
+  2026-09-07, same day: an unauthenticated Logout was first decided,
+  then recognised as hollow -- with no credential there is nothing to
+  log out of.  Self-revocation is `Forget`, authenticated like
+  everything else; the app's "sign out always works" lives
+  client-side: delete the Keychain entry, treat Unauthenticated as
+  already gone.)
 - **Tokens are long-lived until revoked** (or logged out).  Household
   scale: revocation is one press on the admin page, there is no
   refresh choreography to get wrong, and the registry's last-seen

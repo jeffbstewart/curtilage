@@ -1,0 +1,28 @@
+// The device registry file (docs/DESIGN.md "gRPC authentication"):
+// serialized protobuf TEXT FORMAT beside the recordings, so an
+// operator can read it -- and, in an emergency, revoke a device with
+// an editor.  STATE, not API: this schema is OUTSIDE the
+// compatibility promise; only this server reads or writes it.
+syntax = "proto3";
+
+package curtilage.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
+
+// One enrolled device.  The token itself is never stored: token_sha256
+// is the hex SHA-256 of the bearer, so the file leaks nothing usable.
+message DeviceState {
+  string id = 1;
+  string name = 2;
+  string token_sha256 = 3;
+  google.protobuf.Timestamp enrolled_at = 4;
+  google.protobuf.Timestamp last_seen = 5;
+  bool revoked = 6;
+}
+
+// The registry file's root.
+message RegistryState {
+  repeated DeviceState devices = 1;
+}
