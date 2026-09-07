@@ -24,9 +24,28 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/jeffbstewart/curtilage/gen/curtilage/v1;curtilagev1";
 
 service CurtilageService {
+  // The unauthenticated door (docs/DESIGN.md "gRPC authentication"):
+  // which protocol versions this server speaks and how a caller may
+  // authenticate, and NOTHING else -- an unauthenticated caller does
+  // not learn whose house this is.  Everything below except Enroll
+  // and Logout requires a device's bearer token in `authorization`
+  // metadata once any device is enrolled.
+  rpc Hello(HelloRequest) returns (HelloResponse);
+
+  // Enroll trades a one-use enrollment secret (minted inside the
+  // admin's passkey session, carried in a QR) for this device's
+  // long-lived bearer token.  Unauthenticated: the secret is the
+  // authority.
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
+
+  // Logout revokes the calling device's token.  It succeeds with or
+  // without a valid credential -- a revoked device's goodbye is a
+  // no-op, never an error.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
   // Handshake, both ways: the client says what it is, the server says
   // what it offers, and either side can conclude the other is too old
-  // before anything else is asked.
+  // before anything else is asked.  Authenticated: it names the house.
   rpc GetServerInfo(GetServerInfoRequest) returns (GetServerInfoResponse);
 
   // The cameras this installation has, as the household named them.
@@ -52,6 +71,37 @@ enum Platform {
   PLATFORM_UNKNOWN = 0;
   PLATFORM_IOS = 1;
 }
+
+message HelloRequest {
+  // The protocol versions the client speaks, newest first.
+  repeated uint32 protocol_versions = 1;
+}
+
+message HelloResponse {
+  // The protocol versions this server speaks, newest first.
+  repeated uint32 protocol_versions = 1;
+  // How a caller may authenticate: "bearer" today.
+  repeated string auth_methods = 2;
+}
+
+message EnrollRequest {
+  // The one-use enrollment secret from the admin's QR.
+  string secret = 1;
+  // The device's human name ("Jeff's iPhone").
+  string device_name = 2;
+}
+
+message EnrollResponse {
+  // The device's long-lived bearer token.  Store it behind Face ID
+  // (Keychain, biometryCurrentSet); it is shown exactly once.
+  string token = 1;
+  // The registry's id for this device, for display.
+  string device_id = 2;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {}
 
 message GetServerInfoRequest {
   // The API version this client was built against.  1 for now.

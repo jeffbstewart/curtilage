@@ -33,6 +33,7 @@ import (
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/captoken"
 	"github.com/jeffbstewart/curtilage/internal/config"
+	"github.com/jeffbstewart/curtilage/internal/devices"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
 	"github.com/jeffbstewart/curtilage/internal/house"
 	"github.com/jeffbstewart/curtilage/internal/mediacache"
@@ -204,7 +205,25 @@ func cmdRun(args []string) error {
 		}
 	}()
 
-	srv, gs, api := httpServer(cfg, st, rotator, occ, states, fc, kr, mediaCache(fc))
+	// The device registry lives beside the recordings; without a
+	// recording dir there is nowhere to persist it, so enrollment (and
+	// enforcement) stay off.  A registry that will not load is fatal:
+	// failing open would silently drop enforcement.
+	var dr *devices.Registry
+	if dir != "" {
+		var derr error
+		if dr, derr = devices.New(filepath.Join(dir, "devices.textproto")); derr != nil {
+			return derr
+		}
+		if dr.Armed() {
+			log.Printf("grpc auth: armed (%d devices on file)", len(dr.List()))
+		} else {
+			log.Print("grpc auth: open until the first device enrolls")
+		}
+	} else {
+		log.Print("grpc auth: off (no recording dir to hold the registry)")
+	}
+	srv, gs, api := httpServer(cfg, st, rotator, occ, states, fc, kr, mediaCache(fc), dr)
 	go serve(srv, cfg.Listen)
 	go api.Warm(ctx, st) // media hot before anyone looks (server/warm.go)
 	go pruneHourly(ctx, st, dir)
@@ -246,7 +265,7 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 	}
 	// No cache and no warmer: a replay's cuts point at recordings
 	// Frigate has long since pruned.
-	srv, gs, _ := httpServer(cfg, st, nil, occ, states, fc, kr, nil)
+	srv, gs, _ := httpServer(cfg, st, nil, occ, states, fc, kr, nil, nil)
 	go serve(srv, cfg.Listen)
 	log.Printf("replaying %d records from %s at %gx", len(recs), path, speed)
 	var prev time.Time
@@ -301,10 +320,12 @@ func mediaCache(fc *frigate.Client) *mediacache.Cache {
 // httpServer is the one listener: gRPC (h2c) for the API, plain HTTP
 // for /metrics, /healthz and /admin.  MediaManager's pattern: one
 // port, the reverse proxy in front.
-func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring, mc *mediacache.Cache) (*http.Server, *grpc.Server, *server.Server) {
-	gs := grpc.NewServer()
+func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring, mc *mediacache.Cache, dr *devices.Registry) (*http.Server, *grpc.Server, *server.Server) {
 	api := &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st,
-		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration(), Cache: mc}
+		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration(), Cache: mc, Devices: dr}
+	// Every call through the bearer check (server/auth.go); the
+	// unauthenticated set and the arming rule live there.
+	gs := grpc.NewServer(grpc.ChainUnaryInterceptor(api.UnaryAuth()), grpc.ChainStreamInterceptor(api.StreamAuth()))
 	server.Register(gs, api)
 	mux := adminMux(rotator, st, api)
 	// The in-the-house page: subnet-gated, 404 to everyone else.

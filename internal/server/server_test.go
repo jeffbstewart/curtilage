@@ -23,7 +23,9 @@ import (
 func client(t *testing.T, s *Server) curtilagev1.CurtilageServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	gs := grpc.NewServer()
+	// The interceptors ride in every test, as in production: with no
+	// registry (or an empty one) they pass everything through.
+	gs := grpc.NewServer(grpc.ChainUnaryInterceptor(s.UnaryAuth()), grpc.ChainStreamInterceptor(s.StreamAuth()))
 	Register(gs, s)
 	go gs.Serve(lis)
 	t.Cleanup(gs.Stop)
