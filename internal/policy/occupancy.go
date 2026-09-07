@@ -38,7 +38,10 @@ type Watch struct {
 // the count for a zone is the MAXIMUM over cameras of that camera's
 // dwell-qualified tracks -- never the sum.  Arrivals fire when the
 // qualified count rises; departures when the raw count has stayed
-// below the ledger for DepartAfter.
+// below the ledger for DepartAfter.  A stationary object also
+// supersedes same-camera tracks parked on its own box (supersedeIoU):
+// a Frigate restart orphans stationary tracks without an end, and the
+// orphans would otherwise be counted forever.
 //
 // Safe for concurrent reads (Presence); Observe itself, like every
 // Engine, is called from one goroutine.
@@ -58,7 +61,18 @@ type occTrack struct {
 	// entered is when the track first held each watched zone; a zone
 	// left is deleted, so re-entry restarts the dwell clock.
 	entered map[string]time.Time
+	// box is the last reported bounding box, for supersession.
+	box []float64
 }
+
+// supersedeIoU is the box overlap at which a stationary object claims
+// another track of its label as a stale identity of ITSELF.  A
+// Frigate restart loses stationary tracks without an end message, so
+// the same parked car returns under a new id and the orphan would be
+// counted forever; but a re-track of the same object lands on 90%+ of
+// its old box, while two genuinely adjacent cars seen at an angle
+// overlap around 40%.  0.7 splits those cleanly.
+const supersedeIoU = 0.7
 
 // ledger is one (zone, label) count with its transition state.
 type ledger struct {
@@ -182,6 +196,44 @@ func (o *Occupancy) absorb(at time.Time, msg *frigate.Event) {
 			delete(tr.entered, z)
 		}
 	}
+	if len(obj.Box) == 4 {
+		tr.box = obj.Box
+	}
+	// A stationary object owns its spot: any OTHER track of the same
+	// label on the same camera still claiming (nearly) the same box is
+	// a dead identity of this object -- typically orphaned by a
+	// Frigate restart, which loses stationary tracks without an end.
+	// Only a stationary claimant sweeps: a mover briefly occluding a
+	// parked object must never delete the parked object's track.
+	if obj.Stationary && len(tr.box) == 4 {
+		for id, other := range o.tracks {
+			if id == obj.ID || other.camera != tr.camera || other.label != tr.label {
+				continue
+			}
+			if iou(tr.box, other.box) >= supersedeIoU {
+				delete(o.tracks, id)
+			}
+		}
+	}
+}
+
+// iou is intersection-over-union of two [x1, y1, x2, y2] boxes; zero
+// when either is absent or degenerate.
+func iou(a, b []float64) float64 {
+	if len(a) != 4 || len(b) != 4 {
+		return 0
+	}
+	ix := min(a[2], b[2]) - max(a[0], b[0])
+	iy := min(a[3], b[3]) - max(a[1], b[1])
+	if ix <= 0 || iy <= 0 {
+		return 0
+	}
+	inter := ix * iy
+	union := (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
+	if union <= 0 {
+		return 0
+	}
+	return inter / union
 }
 
 // counts is (qualified, raw) for one ledger at at: qualified tracks
