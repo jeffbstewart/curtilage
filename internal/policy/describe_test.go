@@ -38,6 +38,12 @@ func TestDescribeActivity(t *testing.T) {
 		{Event{Kind: KindDeparture, Label: "car", SubLabel: "Jeff's BMW", Zones: []string{"side_parking"}, Objects: map[string]int{"car": 0}}, "A car (Jeff's BMW) left the side parking (empty now)"},
 		{Event{Kind: KindSighting, Label: "bear", Camera: "backyard-gate"}, "A bear sighted (backyard-gate)"},
 		{Event{Kind: KindSighting, Label: "bear", Camera: "porch-west", Zones: []string{"yard"}}, "A bear sighted in the yard"},
+		// The packages zone names nothing beyond its label: the camera
+		// locates the delivery instead.
+		{Event{Kind: KindArrival, Label: "package", Camera: "porch-down", Zones: []string{"packages"}, Objects: map[string]int{"package": 1}}, "A package arrived (porch-down)"},
+		{Event{Kind: KindArrival, Label: "package", Camera: "driveway-down", Zones: []string{"packages"}, Objects: map[string]int{"package": 2}}, "A package arrived (driveway-down) (2 present)"},
+		{Event{Kind: KindDeparture, Label: "package", Camera: "porch-down", Zones: []string{"packages"}, Objects: map[string]int{"package": 0}}, "A package left (porch-down) (empty now)"},
+		{Event{Kind: KindDeparture, Label: "package", Zones: []string{"packages"}, Objects: map[string]int{"package": 0}}, "A package left (empty now)"},
 	}
 	for _, c := range cases {
 		if got := Describe(c.e); got != c.want {

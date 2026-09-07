@@ -37,9 +37,14 @@ func Describe(e Event) string {
 		}
 		return capitalize(s)
 	case KindArrival, KindDeparture:
-		zone := ""
-		if len(e.Zones) > 0 {
-			zone = " " + at(e.Zones[0])
+		// A zone named for its label alone ("package" in "packages")
+		// locates nothing; the camera says where, as sightings do.
+		named := len(e.Zones) > 0 && place(e.Zones[0]) != e.Label+"s"
+		where := ""
+		if named {
+			where = " " + at(e.Zones[0])
+		} else if e.Camera != "" {
+			where = " (" + e.Camera + ")"
 		}
 		who := "A " + e.Label
 		if id := ident(e); id != "" {
@@ -47,16 +52,16 @@ func Describe(e Event) string {
 		}
 		n := e.Objects[e.Label]
 		if e.Kind == KindArrival {
-			s := who + " arrived" + zone
+			s := who + " arrived" + where
 			if n > 1 {
 				s += fmt.Sprintf(" (%d present)", n)
 			}
 			return capitalize(s)
 		}
-		if len(e.Zones) > 0 {
-			zone = " the " + place(e.Zones[0])
+		if named {
+			where = " the " + place(e.Zones[0])
 		}
-		s := who + " left" + zone
+		s := who + " left" + where
 		switch n {
 		case 0:
 			s += " (empty now)"
