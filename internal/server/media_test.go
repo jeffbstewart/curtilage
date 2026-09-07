@@ -198,6 +198,83 @@ func TestGetMediaClipPerCamera(t *testing.T) {
 	}
 }
 
+func TestMediaHandlerRangesOnEndedClip(t *testing.T) {
+	s, _ := mediaServer(t)
+	now := time.Now()
+	s.Store.Apply(now, policy.Change{Op: policy.OpStarted, Event: policy.Event{ID: "ended", Camera: "cam-a", Label: "car", Kind: policy.KindDetection, StartedAt: now.Add(-time.Minute), EndedAt: now, SourceID: "src-ended"}})
+	e, _ := s.Store.Get("ended")
+	link, err := s.Link(e, curtilagev1.Media_MEDIA_CLIP, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := httptest.NewServer(s.MediaHandler())
+	defer web.Close()
+
+	// Plain GET: the whole body, an exact length, and the Range offer.
+	resp, err := http.Get(web.URL + link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	etag := resp.Header.Get("ETag")
+	if resp.StatusCode != 200 || resp.Header.Get("Accept-Ranges") != "bytes" || etag == "" ||
+		resp.Header.Get("Content-Length") != strconv.Itoa(len(body)) || !strings.HasPrefix(string(body), "mp4/api/cam-a/") {
+		t.Fatalf("GET -> %d %v %q", resp.StatusCode, resp.Header, body)
+	}
+
+	ranged := func(ifRange string) *http.Response {
+		req, _ := http.NewRequest(http.MethodGet, web.URL+link, nil)
+		req.Header.Set("Range", "bytes=0-2")
+		if ifRange != "" {
+			req.Header.Set("If-Range", ifRange)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	// A range comes back 206 with just those bytes; If-Range with the
+	// cut's etag keeps the partial answer, a stale etag gets the full
+	// body instead (never a splice of two cuts).
+	for name, tc := range map[string]struct {
+		ifRange string
+		status  int
+		body    string
+	}{
+		"plain range":    {"", http.StatusPartialContent, "mp4"},
+		"if-range match": {etag, http.StatusPartialContent, "mp4"},
+		"if-range stale": {`"other"`, http.StatusOK, string(body)},
+	} {
+		resp := ranged(tc.ifRange)
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != tc.status || string(b) != tc.body {
+			t.Errorf("%s -> %d %q, want %d %q", name, resp.StatusCode, b, tc.status, tc.body)
+		}
+	}
+
+	// The live event's clip refuses ranges: bytes that grow between
+	// requests cannot be spliced, so the Range header is ignored.
+	live, _ := s.Store.Get("with")
+	liveLink, err := s.Link(live, curtilagev1.Media_MEDIA_CLIP, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodGet, web.URL+liveLink, nil)
+	req.Header.Set("Range", "bytes=0-2")
+	lresp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, _ := io.ReadAll(lresp.Body)
+	lresp.Body.Close()
+	if lresp.StatusCode != 200 || lresp.Header.Get("Accept-Ranges") != "none" || lresp.Header.Get("ETag") != "" || len(lb) < 4 {
+		t.Errorf("live clip -> %d %v %d bytes", lresp.StatusCode, lresp.Header, len(lb))
+	}
+}
+
 func TestGetMediaWithoutFrigate(t *testing.T) {
 	c := client(t, &Server{Version: "test", Store: store.New(time.Hour)})
 	stream, _ := c.GetMedia(context.Background(), &curtilagev1.GetMediaRequest{EventId: "x", Media: curtilagev1.Media_MEDIA_SNAPSHOT})

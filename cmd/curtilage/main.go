@@ -291,7 +291,22 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		}
 		mux.ServeHTTP(w, r)
 	})
-	return &http.Server{Addr: cfg.Listen, Handler: h2c.NewHandler(root, &http2.Server{})}, gs
+	// No ReadTimeout/WriteTimeout: both cover a request's whole life,
+	// which would sever WatchEvents streams and long media copies.  The
+	// h2c path (everything the proxy sends) is governed by the
+	// http2.Server's own IdleTimeout, not http.Server's; the
+	// http.Server fields cover a direct HTTP/1.1 caller.
+	// 30s idle matches the proxy's own client/server timeouts, and the
+	// proxy's per-server cap is small (maxconn 50 in homenet): an idle
+	// connection is cheap to reopen and expensive to leave holding a
+	// slot.
+	h2s := &http2.Server{IdleTimeout: 30 * time.Second}
+	return &http.Server{
+		Addr:              cfg.Listen,
+		Handler:           h2c.NewHandler(root, h2s),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}, gs
 }
 
 // mediaSetup builds the Frigate client and the link keyring from
