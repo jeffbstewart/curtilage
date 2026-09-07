@@ -396,6 +396,20 @@ func TestServeCachedClip(t *testing.T) {
 	if got := mc.Stats().Entries; got != entries {
 		t.Fatalf("unsettled cut was cached (%d -> %d entries)", entries, got)
 	}
+
+	// The house page's bolt: cached and settled says so; unsettled or
+	// never-fetched does not.
+	if !s.ClipCached(ended) {
+		t.Error("ClipCached(ended) = false after a cached view")
+	}
+	if s.ClipCached(fresh) {
+		t.Error("ClipCached(fresh) = true before its final cut settled")
+	}
+	never := policy.Event{ID: "never", Camera: "cam-a", Label: "car", Kind: policy.KindDetection,
+		StartedAt: now.Add(-3 * time.Minute), EndedAt: now.Add(-2 * time.Minute), SourceID: "src-never"}
+	if s.ClipCached(never) {
+		t.Error("ClipCached(never fetched) = true")
+	}
 }
 
 func TestGetMediaWithoutFrigate(t *testing.T) {

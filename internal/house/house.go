@@ -149,6 +149,7 @@ type row struct {
 	Clip     string
 	Thumb    string // media link path, or ""
 	Live     bool
+	Cached   bool // every camera's current cut is on disk: opens instantly
 	SourceID string
 	// What is the one sentence (policy.Describe); History is every
 	// earlier sentence, newest first, with when it was said -- how the
@@ -344,6 +345,9 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 			rw.Thumb = link
 		}
 	}
+	if h.API != nil {
+		rw.Cached = h.API.ClipCached(e)
+	}
 	return rw
 }
 
@@ -400,7 +404,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b> <a class="mc" href="/house/event/{{.ID}}">[multi-camera view]</a>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
- <td>{{.Clip}}</td>
+ <td>{{.Clip}}{{if .Cached}} <span title="cached: opens instantly">&#9889;</span>{{end}}</td>
  <td>{{.Verdict}}</td>
  <td class="{{if eq .Audience "household"}}aud-household{{else}}aud-nobody{{end}}">{{.Audience}}</td>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>

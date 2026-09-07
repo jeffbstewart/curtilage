@@ -377,6 +377,29 @@ func (s *Server) serveCached(w http.ResponseWriter, r *http.Request, claims capt
 	return true
 }
 
+// ClipCached reports whether every camera's CURRENT cut of e is
+// already on disk -- the event page will spool without a Frigate
+// wait.  The house page shows it as a small bolt.
+func (s *Server) ClipCached(e policy.Event) bool {
+	if s.Cache == nil || e.Clip == policy.ClipNone {
+		return false
+	}
+	now := time.Now()
+	if !e.EndedAt.IsZero() && now.Before(e.EndedAt.Add(clipMargin+warmGrace)) {
+		return false // the final cut has not settled: a view streams
+	}
+	start, end, stable := clipCut(e, now, true)
+	if !stable {
+		return false
+	}
+	for _, cam := range eventCameras(e) {
+		if !s.Cache.Contains(clipKey(cam, start, end)) {
+			return false
+		}
+	}
+	return true
+}
+
 // clipFetch and snapshotFetch adapt Frigate fetches to cache fills,
 // carrying the fetch counters with them.
 func (s *Server) clipFetch(camera string, start, end time.Time) func(context.Context) (io.ReadCloser, error) {
