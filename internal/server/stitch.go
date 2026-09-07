@@ -105,8 +105,14 @@ func (s *Server) stitchWorker(ctx context.Context) {
 	}
 }
 
+// CanStitch reports whether renders can happen at all (a cache to
+// keep them in; the worker also needs ffmpeg, which every shipped
+// image has).
+func (s *Server) CanStitch() bool { return s.Cache != nil }
+
 // stitch renders one event's cut into the cache.  No usable cut (no
-// box evidence, unscorable cameras) is a quiet no-op, not an error.
+// box evidence, unscorable cameras) is a logged no-op, not an error
+// -- the silence cost an investigation once.
 func (s *Server) stitch(ctx context.Context, e policy.Event, variant string) error {
 	if ffmpegPath == "" || s.Cache == nil || e.EndedAt.IsZero() {
 		return nil
@@ -118,6 +124,7 @@ func (s *Server) stitch(ctx context.Context, e policy.Event, variant string) err
 	start, end, _ := clipCut(e, time.Time{}, false)
 	cut := edl.Build(e, start, end, s.DetectDims(eventCameras(e)))
 	if len(cut) == 0 {
+		log.Printf("stitch: %s: no usable cut (%d box samples over %d cameras)", e.ID, len(e.Boxes), len(eventCameras(e)))
 		return nil
 	}
 	// Every camera's full final cut, from the cache (the warmer has

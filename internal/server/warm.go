@@ -27,6 +27,9 @@ func (s *Server) Warm(ctx context.Context, st *store.Store) {
 	if s.Cache == nil || s.Frigate == nil {
 		return
 	}
+	if ffmpegPath == "" {
+		log.Print("stitch: off (no ffmpeg on this machine)")
+	}
 	s.stitchLo, s.stitchHi = make(chan policy.Event, 16), make(chan policy.Event, 16)
 	go s.stitchWorker(ctx)
 	// The newest already-known events first: after a restart the page

@@ -481,6 +481,7 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		ID                                string
 		Live                              bool
 		StitchLo, StitchHi                bool
+		Stitching                         bool // a render was queued: reload shortly
 		Panes                             []pane
 		History                           []string
 		SpansJSON                         template.JS
@@ -570,6 +571,13 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 			if b, err := json.Marshal(cut); err == nil {
 				p.EDLJSON = template.JS(b)
 			}
+			// A cut exists but no render: being LOOKED AT is the
+			// on-demand trigger (the warmer only touches the newest
+			// few), so queue one and say so.
+			if !p.StitchLo && h.API.CanStitch() {
+				h.API.RequestStitch(e, "lo")
+				p.Stitching = true
+			}
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -626,6 +634,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
+ {{if .Stitching}}<span class="sub">stitched view rendering; reload in a moment</span>{{end}}
 </div>
 {{if .StitchLo}}<div class="stitchbox"><span class="cam" id="stitchcam"></span>{{if .StitchHi}}<button class="hd" id="stitchhd">720p</button>{{end}}<video id="stitchvid" controls playsinline src="/house/stitch/{{.ID}}?v=lo"></video></div>
 {{end}}<div class="grid" id="grid">
