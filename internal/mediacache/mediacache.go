@@ -214,6 +214,30 @@ func copySynced(w *os.File, body io.Reader) (int64, error) {
 	}
 }
 
+// Put adopts a finished file (a stitched render) as key's entry,
+// moving it into the cache directory; src must be on the same
+// filesystem.  An existing entry for key is replaced.
+func (c *Cache) Put(key Key, src string) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(c.dir, key.filename())
+	if err := os.Rename(src, path); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if old, ok := c.entries[key]; ok {
+		c.size -= old.size
+	}
+	c.seq++
+	c.entries[key] = &entry{path: path, size: fi.Size(), seq: c.seq}
+	c.size += fi.Size()
+	c.shed()
+	return nil
+}
+
 // shed evicts least-recently-used entries until the budget holds.
 // Callers hold mu.  Removing an open file is safe on every platform
 // we run: readers keep their handle, the space returns on close.

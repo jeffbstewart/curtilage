@@ -27,6 +27,8 @@ func (s *Server) Warm(ctx context.Context, st *store.Store) {
 	if s.Cache == nil || s.Frigate == nil {
 		return
 	}
+	s.stitchLo, s.stitchHi = make(chan policy.Event, 16), make(chan policy.Event, 16)
+	go s.stitchWorker(ctx)
 	// The newest already-known events first: after a restart the page
 	// a person is most likely to open is one of these.
 	recent, _, err := st.List(nil, 20, "")
@@ -188,6 +190,9 @@ func (s *Server) warmFinal(ctx context.Context, e policy.Event) {
 			log.Printf("warm: %s snapshot: %v", e.ID, err)
 		}
 	}
+	// The cuts are on disk: render the stitched follow view (a no-op
+	// for events without box evidence).
+	s.RequestStitch(e, "lo")
 }
 
 func (s *Server) evictCheckpoints(e policy.Event, prev map[string]time.Time) {

@@ -1,4 +1,4 @@
-package house
+package edl
 
 import (
 	"time"
@@ -30,18 +30,18 @@ const (
 	edlAdvantage = 1.3
 )
 
-type edlSegment struct {
+type Segment struct {
 	C string  `json:"c"`
 	S float64 `json:"s"`
 	E float64 `json:"e"`
 }
 
-// buildEDL scores e's box evidence into segments of clip-relative
+// Build scores e's box evidence into segments of clip-relative
 // seconds over [clipStart, clipEnd].  dims maps camera to detect
 // resolution; a camera without dims cannot be scored and never wins.
 // Returns nil when there is no usable evidence -- the page then falls
 // back to the span heuristic.
-func buildEDL(e policy.Event, clipStart, clipEnd time.Time, dims map[string][2]int) []edlSegment {
+func Build(e policy.Event, clipStart, clipEnd time.Time, dims map[string][2]int) []Segment {
 	// Per-camera samples, in time order (they arrive in order).
 	perCam := map[string][]policy.BoxSample{}
 	for _, b := range e.Boxes {
@@ -80,7 +80,7 @@ func buildEDL(e policy.Event, clipStart, clipEnd time.Time, dims map[string][2]i
 		return w * h / float64(d[0]*d[1])
 	}
 
-	var segs []edlSegment
+	var segs []Segment
 	current := ""
 	var since time.Time // when current took the cut
 	emit := func(from, to time.Time) {
@@ -92,7 +92,7 @@ func buildEDL(e policy.Event, clipStart, clipEnd time.Time, dims map[string][2]i
 			segs[n-1].E = en
 			return
 		}
-		segs = append(segs, edlSegment{C: current, S: s, E: en})
+		segs = append(segs, Segment{C: current, S: s, E: en})
 	}
 	segStart := clipStart
 	for t := clipStart; t.Before(clipEnd); t = t.Add(edlStep) {
