@@ -150,6 +150,12 @@ func cmdRun(args []string) error {
 	// Notable labels (a bear) are news on any camera, zone or not.
 	ic := policy.DefaultIncidentConfig()
 	ic.Notable = cfg.GetNotableLabels()
+	if adj := cfg.GetAdjacency(); len(adj) > 0 {
+		ic.Adjacent = map[string][]string{}
+		for _, a := range adj {
+			ic.Adjacent[a.GetCamera()] = append(ic.Adjacent[a.GetCamera()], a.GetNeighbors()...)
+		}
+	}
 	eng := policy.Multi{policy.NewIncidents(ic), occ, states}
 	if *replay != "" {
 		return runReplay(ctx, cfg, st, eng, occ, states, fc, kr, *replay, *speed)
