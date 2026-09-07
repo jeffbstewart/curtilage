@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/jeffbstewart/curtilage/internal/config"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
 	"github.com/jeffbstewart/curtilage/internal/house"
+	"github.com/jeffbstewart/curtilage/internal/mediacache"
 	"github.com/jeffbstewart/curtilage/internal/metrics"
 	"github.com/jeffbstewart/curtilage/internal/mqtt"
 	"github.com/jeffbstewart/curtilage/internal/policy"
@@ -196,8 +198,9 @@ func cmdRun(args []string) error {
 		}
 	}()
 
-	srv, gs := httpServer(cfg, st, rotator, occ, states, fc, kr)
+	srv, gs, api := httpServer(cfg, st, rotator, occ, states, fc, kr, mediaCache(fc))
 	go serve(srv, cfg.Listen)
+	go api.Warm(ctx, st) // media hot before anyone looks (server/warm.go)
 	go pruneHourly(ctx, st, dir)
 
 	m := cfg.Mqtt
@@ -235,7 +238,9 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 	if err != nil {
 		log.Printf("replay: %v", err)
 	}
-	srv, gs := httpServer(cfg, st, nil, occ, states, fc, kr)
+	// No cache and no warmer: a replay's cuts point at recordings
+	// Frigate has long since pruned.
+	srv, gs, _ := httpServer(cfg, st, nil, occ, states, fc, kr, nil)
 	go serve(srv, cfg.Listen)
 	log.Printf("replaying %d records from %s at %gx", len(recs), path, speed)
 	var prev time.Time
@@ -266,13 +271,34 @@ func runReplay(ctx context.Context, cfg *curtilagev1.Config, st *store.Store, en
 	return nil
 }
 
+// cacheBudget bounds the media cut cache on disk (the pod's /tmp
+// emptyDir holds 20Gi; the spool files share it).
+const cacheBudget int64 = 8 << 30
+
+// mediaCache builds the cut cache, or nil (with a log line) when the
+// disk is not writable -- every request then goes straight to
+// Frigate, as before the cache existed.
+func mediaCache(fc *frigate.Client) *mediacache.Cache {
+	if fc == nil {
+		return nil
+	}
+	dir := filepath.Join(os.TempDir(), "curtilage-media-cache")
+	mc, err := mediacache.New(dir, cacheBudget)
+	if err != nil {
+		log.Printf("media cache: off (%v)", err)
+		return nil
+	}
+	log.Printf("media cache: %s, budget %d MiB", dir, cacheBudget>>20)
+	return mc
+}
+
 // httpServer is the one listener: gRPC (h2c) for the API, plain HTTP
 // for /metrics, /healthz and /admin.  MediaManager's pattern: one
 // port, the reverse proxy in front.
-func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring) (*http.Server, *grpc.Server) {
+func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotator, occ *policy.Occupancy, states *policy.States, fc *frigate.Client, kr *captoken.Keyring, mc *mediacache.Cache) (*http.Server, *grpc.Server, *server.Server) {
 	gs := grpc.NewServer()
 	api := &server.Server{Version: version, DisplayName: cfg.DisplayName, Store: st,
-		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration()}
+		Frigate: fc, Keys: kr, LinkTTL: cfg.GetLinks().GetTtl().AsDuration(), Cache: mc}
 	server.Register(gs, api)
 	mux := adminMux(rotator, st, api)
 	// The in-the-house page: subnet-gated, 404 to everyone else.
@@ -306,7 +332,7 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 		Handler:           h2c.NewHandler(root, h2s),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       30 * time.Second,
-	}, gs
+	}, gs, api
 }
 
 // mediaSetup builds the Frigate client and the link keyring from

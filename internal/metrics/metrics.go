@@ -51,6 +51,9 @@ func Handler(version string, st *store.Store) http.Handler {
 		fmt.Fprintf(w, "curtilage_media_bytes_total %d\n", ms.MediaBytes)
 		fmt.Fprintf(w, "# HELP curtilage_media_failures_total Media Frigate could not supply.\n# TYPE curtilage_media_failures_total counter\n")
 		fmt.Fprintf(w, "curtilage_media_failures_total %d\n", ms.MediaFailures)
+		fmt.Fprintf(w, "# HELP curtilage_media_cache_total Cut-cache lookups on the serving path, by outcome.\n# TYPE curtilage_media_cache_total counter\n")
+		fmt.Fprintf(w, "curtilage_media_cache_total{outcome=\"hit\"} %d\n", ms.CacheHits)
+		fmt.Fprintf(w, "curtilage_media_cache_total{outcome=\"miss\"} %d\n", ms.CacheMisses)
 
 		fmt.Fprintf(w, "# HELP curtilage_build_info Build information.\n# TYPE curtilage_build_info gauge\n")
 		fmt.Fprintf(w, "curtilage_build_info{version=%q} 1\n", version)
