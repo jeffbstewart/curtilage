@@ -28,8 +28,8 @@ service CurtilageService {
   // which protocol versions this server speaks and how a caller may
   // authenticate, and NOTHING else -- an unauthenticated caller does
   // not learn whose house this is.  Everything below except Enroll
-  // and Logout requires a device's bearer token in `authorization`
-  // metadata once any device is enrolled.
+  // requires a device's bearer token in `authorization` metadata once
+  // any device is enrolled.
   rpc Hello(HelloRequest) returns (HelloResponse);
 
   // Enroll trades a one-use enrollment secret (minted inside the
@@ -38,10 +38,13 @@ service CurtilageService {
   // authority.
   rpc Enroll(EnrollRequest) returns (EnrollResponse);
 
-  // Logout revokes the calling device's token.  It succeeds with or
-  // without a valid credential -- a revoked device's goodbye is a
-  // no-op, never an error.
-  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // Forget revokes the calling device's own registration -- a phone
+  // being wiped or handed on kills its token without waiting for the
+  // admin.  Authenticated like everything else: with no valid
+  // credential there is nothing to forget, and the app's "sign out
+  // always works" lives client-side (delete the Keychain entry;
+  // treat Unauthenticated as already gone).
+  rpc Forget(ForgetRequest) returns (ForgetResponse);
 
   // Handshake, both ways: the client says what it is, the server says
   // what it offers, and either side can conclude the other is too old
@@ -99,9 +102,9 @@ message EnrollResponse {
   string device_id = 2;
 }
 
-message LogoutRequest {}
+message ForgetRequest {}
 
-message LogoutResponse {}
+message ForgetResponse {}
 
 message GetServerInfoRequest {
   // The API version this client was built against.  1 for now.

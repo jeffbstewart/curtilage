@@ -74,19 +74,19 @@ func TestAuthLifecycle(t *testing.T) {
 		t.Fatalf("cold WatchEvents -> %v", err)
 	}
 
-	// Logout succeeds without a credential, with a nonsense one, and
-	// with the real one -- which revokes it.
-	if _, err := c.Logout(ctx, &curtilagev1.LogoutRequest{}); err != nil {
-		t.Fatalf("cold logout: %v", err)
+	// Forget is authenticated like everything else: cold and nonsense
+	// credentials are turned away, the real one revokes itself.
+	if _, err := c.Forget(ctx, &curtilagev1.ForgetRequest{}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("cold forget -> %v", err)
 	}
-	if _, err := c.Logout(authed(ctx, "nonsense"), &curtilagev1.LogoutRequest{}); err != nil {
-		t.Fatalf("nonsense logout: %v", err)
+	if _, err := c.Forget(authed(ctx, "nonsense"), &curtilagev1.ForgetRequest{}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("nonsense forget -> %v", err)
 	}
-	if _, err := c.Logout(authed(ctx, enr.GetToken()), &curtilagev1.LogoutRequest{}); err != nil {
-		t.Fatalf("real logout: %v", err)
+	if _, err := c.Forget(authed(ctx, enr.GetToken()), &curtilagev1.ForgetRequest{}); err != nil {
+		t.Fatalf("real forget: %v", err)
 	}
 	// The only device is gone: unarmed again, open again.
 	if _, err := c.ListEvents(ctx, &curtilagev1.ListEventsRequest{}); err != nil {
-		t.Fatalf("post-logout ListEvents: %v", err)
+		t.Fatalf("post-forget ListEvents: %v", err)
 	}
 }

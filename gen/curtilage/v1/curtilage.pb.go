@@ -545,26 +545,26 @@ func (x *EnrollResponse) GetDeviceId() string {
 	return ""
 }
 
-type LogoutRequest struct {
+type ForgetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LogoutRequest) Reset() {
-	*x = LogoutRequest{}
+func (x *ForgetRequest) Reset() {
+	*x = ForgetRequest{}
 	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LogoutRequest) String() string {
+func (x *ForgetRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LogoutRequest) ProtoMessage() {}
+func (*ForgetRequest) ProtoMessage() {}
 
-func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
+func (x *ForgetRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_curtilage_v1_curtilage_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -576,31 +576,31 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
-func (*LogoutRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ForgetRequest.ProtoReflect.Descriptor instead.
+func (*ForgetRequest) Descriptor() ([]byte, []int) {
 	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{4}
 }
 
-type LogoutResponse struct {
+type ForgetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LogoutResponse) Reset() {
-	*x = LogoutResponse{}
+func (x *ForgetResponse) Reset() {
+	*x = ForgetResponse{}
 	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LogoutResponse) String() string {
+func (x *ForgetResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LogoutResponse) ProtoMessage() {}
+func (*ForgetResponse) ProtoMessage() {}
 
-func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
+func (x *ForgetResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_curtilage_v1_curtilage_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -612,8 +612,8 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
-func (*LogoutResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ForgetResponse.ProtoReflect.Descriptor instead.
+func (*ForgetResponse) Descriptor() ([]byte, []int) {
 	return file_curtilage_v1_curtilage_proto_rawDescGZIP(), []int{5}
 }
 
@@ -1719,8 +1719,8 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x0eEnrollResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\"\x0f\n" +
-	"\rLogoutRequest\"\x10\n" +
-	"\x0eLogoutResponse\"\x81\x01\n" +
+	"\rForgetRequest\"\x10\n" +
+	"\x0eForgetResponse\"\x81\x01\n" +
 	"\x14GetServerInfoRequest\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\rR\n" +
 	"apiVersion\x122\n" +
@@ -1827,7 +1827,7 @@ const file_curtilage_v1_curtilage_proto_rawDesc = "" +
 	"\x10CurtilageService\x12@\n" +
 	"\x05Hello\x12\x1a.curtilage.v1.HelloRequest\x1a\x1b.curtilage.v1.HelloResponse\x12C\n" +
 	"\x06Enroll\x12\x1b.curtilage.v1.EnrollRequest\x1a\x1c.curtilage.v1.EnrollResponse\x12C\n" +
-	"\x06Logout\x12\x1b.curtilage.v1.LogoutRequest\x1a\x1c.curtilage.v1.LogoutResponse\x12X\n" +
+	"\x06Forget\x12\x1b.curtilage.v1.ForgetRequest\x1a\x1c.curtilage.v1.ForgetResponse\x12X\n" +
 	"\rGetServerInfo\x12\".curtilage.v1.GetServerInfoRequest\x1a#.curtilage.v1.GetServerInfoResponse\x12R\n" +
 	"\vListCameras\x12 .curtilage.v1.ListCamerasRequest\x1a!.curtilage.v1.ListCamerasResponse\x12O\n" +
 	"\n" +
@@ -1860,8 +1860,8 @@ var file_curtilage_v1_curtilage_proto_goTypes = []any{
 	(*HelloResponse)(nil),         // 6: curtilage.v1.HelloResponse
 	(*EnrollRequest)(nil),         // 7: curtilage.v1.EnrollRequest
 	(*EnrollResponse)(nil),        // 8: curtilage.v1.EnrollResponse
-	(*LogoutRequest)(nil),         // 9: curtilage.v1.LogoutRequest
-	(*LogoutResponse)(nil),        // 10: curtilage.v1.LogoutResponse
+	(*ForgetRequest)(nil),         // 9: curtilage.v1.ForgetRequest
+	(*ForgetResponse)(nil),        // 10: curtilage.v1.ForgetResponse
 	(*GetServerInfoRequest)(nil),  // 11: curtilage.v1.GetServerInfoRequest
 	(*GetServerInfoResponse)(nil), // 12: curtilage.v1.GetServerInfoResponse
 	(*ListCamerasRequest)(nil),    // 13: curtilage.v1.ListCamerasRequest
@@ -1902,7 +1902,7 @@ var file_curtilage_v1_curtilage_proto_depIdxs = []int32{
 	26, // 17: curtilage.v1.GetMediaResponse.info:type_name -> curtilage.v1.MediaInfo
 	5,  // 18: curtilage.v1.CurtilageService.Hello:input_type -> curtilage.v1.HelloRequest
 	7,  // 19: curtilage.v1.CurtilageService.Enroll:input_type -> curtilage.v1.EnrollRequest
-	9,  // 20: curtilage.v1.CurtilageService.Logout:input_type -> curtilage.v1.LogoutRequest
+	9,  // 20: curtilage.v1.CurtilageService.Forget:input_type -> curtilage.v1.ForgetRequest
 	11, // 21: curtilage.v1.CurtilageService.GetServerInfo:input_type -> curtilage.v1.GetServerInfoRequest
 	13, // 22: curtilage.v1.CurtilageService.ListCameras:input_type -> curtilage.v1.ListCamerasRequest
 	20, // 23: curtilage.v1.CurtilageService.ListEvents:input_type -> curtilage.v1.ListEventsRequest
@@ -1910,7 +1910,7 @@ var file_curtilage_v1_curtilage_proto_depIdxs = []int32{
 	24, // 25: curtilage.v1.CurtilageService.GetMedia:input_type -> curtilage.v1.GetMediaRequest
 	6,  // 26: curtilage.v1.CurtilageService.Hello:output_type -> curtilage.v1.HelloResponse
 	8,  // 27: curtilage.v1.CurtilageService.Enroll:output_type -> curtilage.v1.EnrollResponse
-	10, // 28: curtilage.v1.CurtilageService.Logout:output_type -> curtilage.v1.LogoutResponse
+	10, // 28: curtilage.v1.CurtilageService.Forget:output_type -> curtilage.v1.ForgetResponse
 	12, // 29: curtilage.v1.CurtilageService.GetServerInfo:output_type -> curtilage.v1.GetServerInfoResponse
 	15, // 30: curtilage.v1.CurtilageService.ListCameras:output_type -> curtilage.v1.ListCamerasResponse
 	21, // 31: curtilage.v1.CurtilageService.ListEvents:output_type -> curtilage.v1.ListEventsResponse

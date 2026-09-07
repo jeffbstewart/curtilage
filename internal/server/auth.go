@@ -1,10 +1,12 @@
 // gRPC authentication (docs/DESIGN.md): every call carries a
 // device's bearer token in `authorization` metadata, except the
-// explicit unauthenticated set -- Hello (mutual discovery), Enroll
-// (the QR secret is the authority) and Logout (a revoked device's
-// goodbye is a no-op success).  Auth ARMS when the first device
-// enrolls; until then the registry answers yes to everything, so a
-// fresh install keeps working before any QR has ever been minted.
+// explicit unauthenticated set -- Hello (mutual discovery) and
+// Enroll (the QR secret is the authority).  Forget, a device
+// revoking its own registration, is authenticated like everything
+// else: the "sign out always works" affordance lives client-side.
+// Auth ARMS when the first device enrolls; until then the registry
+// answers yes to everything, so a fresh install keeps working before
+// any QR has ever been minted.
 package server
 
 import (
@@ -25,10 +27,11 @@ import (
 const ProtocolVersion = 1
 
 // unauthenticated is the explicit no-credential set, by full method.
+// Deliberately just these two: even Forget is authenticated -- with
+// no valid credential there is nothing to forget.
 var unauthenticated = map[string]bool{
 	"/curtilage.v1.CurtilageService/Hello":  true,
 	"/curtilage.v1.CurtilageService/Enroll": true,
-	"/curtilage.v1.CurtilageService/Logout": true,
 }
 
 // Hello implements the unauthenticated discovery door: versions and
@@ -57,14 +60,17 @@ func (s *Server) Enroll(ctx context.Context, req *curtilagev1.EnrollRequest) (*c
 	return &curtilagev1.EnrollResponse{Token: token, DeviceId: d.ID}, nil
 }
 
-// Logout revokes the calling device's token; success either way.
-func (s *Server) Logout(ctx context.Context, req *curtilagev1.LogoutRequest) (*curtilagev1.LogoutResponse, error) {
+// Forget revokes the calling device's own registration.  The
+// interceptor has already authenticated the bearer (or, unarmed,
+// waved the call through -- then there is nothing to forget and this
+// is a no-op).
+func (s *Server) Forget(ctx context.Context, req *curtilagev1.ForgetRequest) (*curtilagev1.ForgetResponse, error) {
 	if s.Devices != nil {
 		if token, ok := bearer(ctx); ok {
-			s.Devices.Logout(token, time.Now())
+			s.Devices.Forget(token, time.Now())
 		}
 	}
-	return &curtilagev1.LogoutResponse{}, nil
+	return &curtilagev1.ForgetResponse{}, nil
 }
 
 // UnaryAuth and StreamAuth enforce the bearer on everything outside

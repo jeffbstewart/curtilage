@@ -85,19 +85,19 @@ func TestEnrollAuthenticateRevoke(t *testing.T) {
 	}
 }
 
-func TestLogout(t *testing.T) {
+func TestForget(t *testing.T) {
 	r, _ := New("")
 	t0 := time.Date(2026, 9, 7, 22, 0, 0, 0, time.UTC)
 	_, token, err := r.Enroll(r.MintEnrollment(t0), "phone", t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Logout("not-a-token", t0) // quiet no-op
-	r.Logout(token, t0)
+	r.Forget("not-a-token", t0) // quiet no-op
+	r.Forget(token, t0)
 	if r.Armed() {
-		t.Fatal("armed after the only device logged out")
+		t.Fatal("armed after the only device forgot itself")
 	}
-	r.Logout(token, t0) // twice: still quiet
+	r.Forget(token, t0) // twice: still quiet
 }
 
 func readFile(t *testing.T, path string) (string, error) {

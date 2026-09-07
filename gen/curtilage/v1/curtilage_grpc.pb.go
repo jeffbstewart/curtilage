@@ -38,7 +38,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	CurtilageService_Hello_FullMethodName         = "/curtilage.v1.CurtilageService/Hello"
 	CurtilageService_Enroll_FullMethodName        = "/curtilage.v1.CurtilageService/Enroll"
-	CurtilageService_Logout_FullMethodName        = "/curtilage.v1.CurtilageService/Logout"
+	CurtilageService_Forget_FullMethodName        = "/curtilage.v1.CurtilageService/Forget"
 	CurtilageService_GetServerInfo_FullMethodName = "/curtilage.v1.CurtilageService/GetServerInfo"
 	CurtilageService_ListCameras_FullMethodName   = "/curtilage.v1.CurtilageService/ListCameras"
 	CurtilageService_ListEvents_FullMethodName    = "/curtilage.v1.CurtilageService/ListEvents"
@@ -54,18 +54,21 @@ type CurtilageServiceClient interface {
 	// which protocol versions this server speaks and how a caller may
 	// authenticate, and NOTHING else -- an unauthenticated caller does
 	// not learn whose house this is.  Everything below except Enroll
-	// and Logout requires a device's bearer token in `authorization`
-	// metadata once any device is enrolled.
+	// requires a device's bearer token in `authorization` metadata once
+	// any device is enrolled.
 	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 	// Enroll trades a one-use enrollment secret (minted inside the
 	// admin's passkey session, carried in a QR) for this device's
 	// long-lived bearer token.  Unauthenticated: the secret is the
 	// authority.
 	Enroll(ctx context.Context, in *EnrollRequest, opts ...grpc.CallOption) (*EnrollResponse, error)
-	// Logout revokes the calling device's token.  It succeeds with or
-	// without a valid credential -- a revoked device's goodbye is a
-	// no-op, never an error.
-	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
+	// Forget revokes the calling device's own registration -- a phone
+	// being wiped or handed on kills its token without waiting for the
+	// admin.  Authenticated like everything else: with no valid
+	// credential there is nothing to forget, and the app's "sign out
+	// always works" lives client-side (delete the Keychain entry;
+	// treat Unauthenticated as already gone).
+	Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*ForgetResponse, error)
 	// Handshake, both ways: the client says what it is, the server says
 	// what it offers, and either side can conclude the other is too old
 	// before anything else is asked.  Authenticated: it names the house.
@@ -112,10 +115,10 @@ func (c *curtilageServiceClient) Enroll(ctx context.Context, in *EnrollRequest, 
 	return out, nil
 }
 
-func (c *curtilageServiceClient) Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error) {
+func (c *curtilageServiceClient) Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*ForgetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(LogoutResponse)
-	err := c.cc.Invoke(ctx, CurtilageService_Logout_FullMethodName, in, out, cOpts...)
+	out := new(ForgetResponse)
+	err := c.cc.Invoke(ctx, CurtilageService_Forget_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -198,18 +201,21 @@ type CurtilageServiceServer interface {
 	// which protocol versions this server speaks and how a caller may
 	// authenticate, and NOTHING else -- an unauthenticated caller does
 	// not learn whose house this is.  Everything below except Enroll
-	// and Logout requires a device's bearer token in `authorization`
-	// metadata once any device is enrolled.
+	// requires a device's bearer token in `authorization` metadata once
+	// any device is enrolled.
 	Hello(context.Context, *HelloRequest) (*HelloResponse, error)
 	// Enroll trades a one-use enrollment secret (minted inside the
 	// admin's passkey session, carried in a QR) for this device's
 	// long-lived bearer token.  Unauthenticated: the secret is the
 	// authority.
 	Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error)
-	// Logout revokes the calling device's token.  It succeeds with or
-	// without a valid credential -- a revoked device's goodbye is a
-	// no-op, never an error.
-	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
+	// Forget revokes the calling device's own registration -- a phone
+	// being wiped or handed on kills its token without waiting for the
+	// admin.  Authenticated like everything else: with no valid
+	// credential there is nothing to forget, and the app's "sign out
+	// always works" lives client-side (delete the Keychain entry;
+	// treat Unauthenticated as already gone).
+	Forget(context.Context, *ForgetRequest) (*ForgetResponse, error)
 	// Handshake, both ways: the client says what it is, the server says
 	// what it offers, and either side can conclude the other is too old
 	// before anything else is asked.  Authenticated: it names the house.
@@ -242,8 +248,8 @@ func (UnimplementedCurtilageServiceServer) Hello(context.Context, *HelloRequest)
 func (UnimplementedCurtilageServiceServer) Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Enroll not implemented")
 }
-func (UnimplementedCurtilageServiceServer) Logout(context.Context, *LogoutRequest) (*LogoutResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
+func (UnimplementedCurtilageServiceServer) Forget(context.Context, *ForgetRequest) (*ForgetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Forget not implemented")
 }
 func (UnimplementedCurtilageServiceServer) GetServerInfo(context.Context, *GetServerInfoRequest) (*GetServerInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetServerInfo not implemented")
@@ -317,20 +323,20 @@ func _CurtilageService_Enroll_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CurtilageService_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LogoutRequest)
+func _CurtilageService_Forget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CurtilageServiceServer).Logout(ctx, in)
+		return srv.(CurtilageServiceServer).Forget(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: CurtilageService_Logout_FullMethodName,
+		FullMethod: CurtilageService_Forget_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CurtilageServiceServer).Logout(ctx, req.(*LogoutRequest))
+		return srv.(CurtilageServiceServer).Forget(ctx, req.(*ForgetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -427,8 +433,8 @@ var CurtilageService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CurtilageService_Enroll_Handler,
 		},
 		{
-			MethodName: "Logout",
-			Handler:    _CurtilageService_Logout_Handler,
+			MethodName: "Forget",
+			Handler:    _CurtilageService_Forget_Handler,
 		},
 		{
 			MethodName: "GetServerInfo",

@@ -154,10 +154,11 @@ func (r *Registry) Authenticate(token string, now time.Time) (Device, bool) {
 	return device(d), true
 }
 
-// Logout revokes the device presenting token; an unknown or already
-// revoked token is a quiet success (docs/DESIGN.md: a revoked
-// device's goodbye is a no-op, never an error).
-func (r *Registry) Logout(token string, now time.Time) {
+// Forget revokes the device presenting token: self-service
+// unenrollment.  The caller was already authenticated; an unknown or
+// already revoked token (an unarmed registry's pass-through) is a
+// quiet no-op.
+func (r *Registry) Forget(token string, now time.Time) {
 	h := hashToken(token)
 	r.mu.Lock()
 	defer r.mu.Unlock()
