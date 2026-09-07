@@ -53,11 +53,12 @@ type pending struct {
 
 // Registry is the store.  Safe for concurrent use.
 type Registry struct {
-	mu      sync.Mutex
-	path    string                     // "" persists nothing (replay, tests)
-	order   []*curtilagev1.DeviceState // file order, stable
-	pending map[string]pending         // secret -> expiry
-	saved   time.Time
+	mu       sync.Mutex
+	path     string                     // "" persists nothing (replay, tests)
+	order    []*curtilagev1.DeviceState // file order, stable
+	passkeys []*curtilagev1.PasskeyState
+	pending  map[string]pending // secret -> expiry
+	saved    time.Time
 }
 
 // New loads the registry at path, which need not exist yet; "" is a
@@ -80,6 +81,14 @@ func New(path string) (*Registry, error) {
 	}
 	for _, d := range st.Devices {
 		r.order = append(r.order, d)
+	}
+	r.passkeys = st.Passkeys
+	// A passkey that will not parse is fatal at load, like any other
+	// registry corruption: failing open would drop the admin gate.
+	for _, p := range r.passkeys {
+		if _, err := passkey(p); err != nil {
+			return nil, fmt.Errorf("devices: passkey %s: %w", p.Id, err)
+		}
 	}
 	return r, nil
 }
@@ -211,7 +220,7 @@ func (r *Registry) save(now time.Time) error {
 	if r.path == "" {
 		return nil
 	}
-	st := &curtilagev1.RegistryState{Devices: r.order}
+	st := &curtilagev1.RegistryState{Devices: r.order, Passkeys: r.passkeys}
 	b, err := prototext.MarshalOptions{Multiline: true}.Marshal(st)
 	if err != nil {
 		return err
