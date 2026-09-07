@@ -12,20 +12,20 @@
 package house
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
+	"github.com/jeffbstewart/curtilage/internal/edl"
 	"github.com/jeffbstewart/curtilage/internal/policy"
 	"github.com/jeffbstewart/curtilage/internal/server"
 	"github.com/jeffbstewart/curtilage/internal/store"
@@ -54,44 +54,6 @@ type Handler struct {
 	States *policy.States
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
-
-	// Frigate's per-camera detect resolutions (the space box samples
-	// are in), fetched lazily and refreshed at most every 10m when an
-	// event names a camera we have no dims for.
-	dimsMu sync.Mutex
-	dims   map[string][2]int
-	dimsAt time.Time
-}
-
-// detectDims returns the detect resolutions, fetching from Frigate
-// when a wanted camera is unknown (rate-limited).  nil or a partial
-// map is fine: an unscored camera never wins the EDL, and an empty
-// EDL falls back to the span heuristic.
-func (h *Handler) detectDims(cams []string) map[string][2]int {
-	h.dimsMu.Lock()
-	defer h.dimsMu.Unlock()
-	missing := h.dims == nil
-	for _, c := range cams {
-		if _, ok := h.dims[c]; !ok {
-			missing = true
-		}
-	}
-	if !missing || time.Since(h.dimsAt) < 10*time.Minute {
-		return h.dims
-	}
-	if h.API == nil || h.API.Frigate == nil {
-		return h.dims
-	}
-	h.dimsAt = time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	d, err := h.API.Frigate.DetectDims(ctx)
-	if err != nil {
-		log.Printf("house: detect dims: %v", err)
-		return h.dims
-	}
-	h.dims = d
-	return d
 }
 
 func (h *Handler) loc() *time.Location {
@@ -240,6 +202,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if id, ok := strings.CutPrefix(r.URL.Path, "/house/event/"); ok {
 		h.event(w, id)
+		return
+	}
+	if id, ok := strings.CutPrefix(r.URL.Path, "/house/stitch/"); ok {
+		h.stitch(w, r, id)
 		return
 	}
 	now := time.Now()
@@ -453,6 +419,39 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 <div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 `))
 
+// stitch serves /house/stitch/<id>?v=lo|hi: the event's stitched
+// follow view, straight from the render cache with ranges.  Behind
+// the same gate as every house page (Allowed ran in ServeHTTP), so no
+// capability token; the app's door comes with its phase.  A miss
+// queues a render and 404s -- the next visit has it.
+func (h *Handler) stitch(w http.ResponseWriter, r *http.Request, id string) {
+	e, ok := h.Store.Get(id)
+	if !ok || e.Running() || h.API == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	variant := "lo"
+	if r.URL.Query().Get("v") == "hi" {
+		variant = "hi"
+	}
+	path, ok := h.API.StitchPath(e, variant)
+	if !ok {
+		h.API.RequestStitch(e, variant)
+		http.Error(w, "not stitched yet", http.StatusNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeContent(w, r, "", time.Time{}, f)
+}
+
 // event serves /house/event/<id>: the one thing that happened, with
 // every involved camera's clip of the SAME absolute window -- which
 // is what makes the panes time-synchronized without any server work.
@@ -479,7 +478,9 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 	}
 	p := struct {
 		DisplayName, What, When, Duration string
+		ID                                string
 		Live                              bool
+		StitchLo, StitchHi                bool
 		Panes                             []pane
 		History                           []string
 		SpansJSON                         template.JS
@@ -495,7 +496,12 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		DisplayName: h.DisplayName,
 		What:        policy.Describe(e),
 		When:        e.StartedAt.In(h.loc()).Format("Mon Jan 2 15:04:05"),
+		ID:          e.ID,
 		Live:        e.Running(),
+	}
+	if h.API != nil && !e.Running() {
+		p.StitchLo = h.API.StitchCached(e, "lo")
+		p.StitchHi = h.API.StitchCached(e, "hi")
 	}
 	end := e.EndedAt
 	if end.IsZero() {
@@ -555,12 +561,13 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 	if b, err := json.Marshal(spans); err == nil {
 		p.SpansJSON = template.JS(b)
 	}
-	// The scored cut (edl.go), for ended events with box evidence:
-	// follow mode plays it; empty means the span heuristic drives.
+	// The scored cut (internal/edl), for ended events with box
+	// evidence: follow mode plays it; empty means the span heuristic
+	// drives.
 	p.EDLJSON = template.JS("[]")
-	if !e.Running() && len(e.Boxes) > 0 {
-		if edl := buildEDL(e, clipStart, end.Add(5*time.Second), h.detectDims(cams)); len(edl) > 0 {
-			if b, err := json.Marshal(edl); err == nil {
+	if !e.Running() && len(e.Boxes) > 0 && h.API != nil {
+		if cut := edl.Build(e, clipStart, end.Add(5*time.Second), h.API.DetectDims(cams)); len(cut) > 0 {
+			if b, err := json.Marshal(cut); err == nil {
 				p.EDLJSON = template.JS(b)
 			}
 		}
@@ -604,18 +611,25 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
  body.follow .pane { flex: 0 0 140px; }
  body.follow .pane.show { flex: 1 1 100%; order: -1; }
  body.follow .pane.big { grid-column: auto; }
+ .stitchbox { display: none; position: relative; max-width: 1280px; }
+ .stitchbox video { width: 100%; display: block; border-radius: 6px; background: #000; }
+ .stitchbox .cam { position: absolute; top: .3rem; left: .5rem; z-index: 1; color: #fff; text-shadow: 0 0 4px #000; font-weight: 600; }
+ .stitchbox .hd { position: absolute; top: .3rem; right: .5rem; z-index: 1; }
+ body.stitch .stitchbox { display: block; }
+ body.stitch .grid, body.stitch #play, body.stitch #seek, body.stitch #clock { display: none; }
 </style>
 <body class="follow">
 <h1>{{.What}}</h1>
 <div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where the follow tab would look right now; in follow, click a thumbnail to pin it. <a href="/house/">back to the house</a></div>
 <div class="bar">
- <span class="tabs"><button id="tabgrid">grid</button><button id="tabfollow" class="on">follow</button></span>
+ <span class="tabs">{{if .StitchLo}}<button id="tabstitch" class="on">stitched</button>{{end}}<button id="tabgrid">grid</button><button id="tabfollow"{{if not .StitchLo}} class="on"{{end}}>follow</button></span>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
 </div>
-<div class="grid" id="grid">
-{{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video autoplay preload="auto" muted playsinline src="{{.Src}}"></video></div>
+{{if .StitchLo}}<div class="stitchbox"><span class="cam" id="stitchcam"></span>{{if .StitchHi}}<button class="hd" id="stitchhd">720p</button>{{end}}<video id="stitchvid" controls playsinline src="/house/stitch/{{.ID}}?v=lo"></video></div>
+{{end}}<div class="grid" id="grid">
+{{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video {{if $.StitchLo}}preload="none"{{else}}autoplay preload="auto"{{end}} muted playsinline src="{{.Src}}"></video></div>
 {{end}}</div>
 {{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}
 <div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
@@ -689,15 +703,46 @@ play.onclick = () => {
 };
 seek.oninput = () => { scrubbing = true; vids.forEach(v => { v.currentTime = +seek.value; }); };
 seek.onchange = () => { scrubbing = false; };
-const tabgrid = document.getElementById('tabgrid'), tabfollow = document.getElementById('tabfollow');
-function setTab(follow) {
-  document.body.classList.toggle('follow', follow);
-  tabgrid.classList.toggle('on', !follow);
-  tabfollow.classList.toggle('on', follow);
+const tabgrid = document.getElementById('tabgrid'), tabfollow = document.getElementById('tabfollow'),
+      tabstitch = document.getElementById('tabstitch'), sv = document.getElementById('stitchvid'),
+      stitchcam = document.getElementById('stitchcam'), stitchhd = document.getElementById('stitchhd');
+// With a stitched render the grid's eight decoders start only when a
+// grid tab is opened -- one video is the whole point.
+let gridStarted = !sv;
+function startGrid() {
+  if (gridStarted) return;
+  gridStarted = true;
+  vids.forEach(v => { v.preload = 'auto'; v.play().catch(() => {}); });
+}
+function setMode(m) {
+  document.body.classList.toggle('stitch', m === 'stitch');
+  document.body.classList.toggle('follow', m === 'follow');
+  if (tabstitch) tabstitch.classList.toggle('on', m === 'stitch');
+  tabgrid.classList.toggle('on', m === 'grid');
+  tabfollow.classList.toggle('on', m === 'follow');
+  if (m === 'stitch') { vids.forEach(v => v.pause()); sv.play().catch(() => {}); }
+  else { if (sv) sv.pause(); startGrid(); }
   paint();
 }
-tabgrid.onclick = () => setTab(false);
-tabfollow.onclick = () => setTab(true);
+tabgrid.onclick = () => setMode('grid');
+tabfollow.onclick = () => setMode('follow');
+if (tabstitch) tabstitch.onclick = () => setMode('stitch');
+if (sv) {
+  // The stitched timeline equals the clip timeline (the cut's
+  // segments are contiguous), so the same edl names the camera.
+  sv.addEventListener('timeupdate', () => {
+    let c = '';
+    for (const g of edl) if (g.s <= sv.currentTime && sv.currentTime < g.e) { c = g.c; break; }
+    stitchcam.textContent = c;
+  });
+  setMode('stitch');
+}
+if (stitchhd) stitchhd.onclick = () => {
+  const t = sv.currentTime, wasPlaying = !sv.paused;
+  sv.src = '/house/stitch/{{.ID}}?v=hi';
+  sv.addEventListener('loadedmetadata', () => { sv.currentTime = t; if (wasPlaying) sv.play().catch(() => {}); }, { once: true });
+  stitchhd.remove();
+};
 panes.forEach(p => p.onclick = () => {
   if (document.body.classList.contains('follow')) {
     pinned = (pinned === p.dataset.cam) ? null : p.dataset.cam; // pin this camera, or let best() drive again

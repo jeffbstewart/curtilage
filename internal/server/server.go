@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -52,6 +53,52 @@ type Server struct {
 	// share one Frigate fetch each; nil serves every request straight
 	// from Frigate as before.
 	Cache *mediacache.Cache
+
+	// Frigate's per-camera detect resolutions -- the pixel space box
+	// samples are in -- fetched lazily (DetectDims).
+	dimsMu sync.Mutex
+	dims   map[string][2]int
+	dimsAt time.Time
+
+	// The stitch queues (stitch.go); made by Warm.
+	stitchLo, stitchHi chan policy.Event
+}
+
+// DetectDims returns Frigate's detect resolutions, fetching when a
+// wanted camera is unknown (refreshed at most every 10m).  nil or a
+// partial map is fine: an unscored camera never wins a cut.
+func (s *Server) DetectDims(cams []string) map[string][2]int {
+	s.dimsMu.Lock()
+	defer s.dimsMu.Unlock()
+	missing := s.dims == nil
+	for _, c := range cams {
+		if _, ok := s.dims[c]; !ok {
+			missing = true
+		}
+	}
+	if !missing || time.Since(s.dimsAt) < 10*time.Minute {
+		return s.dims
+	}
+	if s.Frigate == nil {
+		return s.dims
+	}
+	s.dimsAt = time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	d, err := s.Frigate.DetectDims(ctx)
+	if err != nil {
+		log.Printf("detect dims: %v", err)
+		return s.dims
+	}
+	s.dims = d
+	return d
+}
+
+// SetDetectDims pins the resolution table; tests use it.
+func (s *Server) SetDetectDims(d map[string][2]int) {
+	s.dimsMu.Lock()
+	defer s.dimsMu.Unlock()
+	s.dims, s.dimsAt = d, time.Now()
 }
 
 // Register attaches s to gs.

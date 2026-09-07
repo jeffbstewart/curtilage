@@ -16,5 +16,10 @@ RUN CGO_ENABLED=0 go build -trimpath \
 
 FROM scratch
 COPY --from=build /curtilage /curtilage
+# ffmpeg, fully static, for the stitched follow view (server/stitch.go);
+# a single-binary build that runs in an empty image.  Pinned by digest
+# like every other input (mwader/static-ffmpeg:7.1.1, resolved
+# 2026-09-07).
+COPY --from=mwader/static-ffmpeg:7.1.1@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c /ffmpeg /ffmpeg
 # curtilage runs as an unprivileged user; the manifest sets the uid.
 ENTRYPOINT ["/curtilage"]
