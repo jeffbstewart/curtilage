@@ -144,9 +144,12 @@ type Object struct {
 	Stationary    bool     `json:"stationary"`
 	CurrentZones  []string `json:"current_zones"`
 	EnteredZones  []string `json:"entered_zones"`
-	HasClip       bool     `json:"has_clip"`
-	HasSnapshot   bool     `json:"has_snapshot"`
-	MaxSeverity   string   `json:"max_severity"`
+	// Box is the bounding box [x1, y1, x2, y2] in detect-resolution
+	// pixels; empty when the message carries none.
+	Box         []float64 `json:"box"`
+	HasClip     bool      `json:"has_clip"`
+	HasSnapshot bool      `json:"has_snapshot"`
+	MaxSeverity string    `json:"max_severity"`
 	// Plate is LPR's read of a vehicle's license plate, published as
 	// the same null / "text" / ["text", score] shapes as sub_label.
 	// A KNOWN plate (lpr.known_plates) surfaces its friendly name in

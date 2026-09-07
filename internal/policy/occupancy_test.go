@@ -52,6 +52,53 @@ func TestQuietWatch(t *testing.T) {
 	}
 }
 
+// A Frigate restart loses a stationary track without an end message:
+// the same parked car comes back under a new id on (nearly) the same
+// box, and without supersession both are counted forever -- the
+// garage's "(7 remain)" in a one-car space.
+func TestStationarySupersedesOwnBox(t *testing.T) {
+	msg := func(typ, id string, stationary bool, box string) []byte {
+		return []byte(fmt.Sprintf(`{"type":%q,"after":{"id":%q,"camera":"garage","label":"car","start_time":0,"end_time":null,`+
+			`"entered_zones":["right_parking_space"],"current_zones":["right_parking_space"],"has_snapshot":true,"has_clip":true,`+
+			`"false_positive":false,"stationary":%t,"box":%s}}`, typ, id, stationary, box))
+	}
+	o := NewOccupancy([]Watch{{Zone: "right_parking_space", ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute}})
+	t0 := time.Date(2026, 9, 7, 11, 0, 0, 0, time.UTC)
+	at := func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
+	tick := func(s int) []Change { return o.Observe(at(s), "frigate/garage/status/detect", []byte("ON")) }
+
+	o.Observe(at(0), "frigate/events", msg("new", "ghost", true, "[100,100,300,250]"))
+	if c := tick(61); len(c) != 1 || c[0].Event.Kind != KindArrival {
+		t.Fatalf("first arrival: %+v", c)
+	}
+	// The restart-orphaned ghost's successor parks on its box: the
+	// ghost is superseded, not joined.
+	o.Observe(at(100), "frigate/events", msg("new", "succ", true, "[104,102,302,252]"))
+	if _, ok := o.tracks["ghost"]; ok {
+		t.Fatal("ghost survived its successor")
+	}
+	if c := tick(161); c != nil {
+		t.Fatalf("re-track counted as a second car: %+v", c)
+	}
+	if st := o.Presence(); st[0].Count != 1 {
+		t.Fatalf("presence: %+v", st)
+	}
+
+	// A genuinely adjacent car overlaps far less (about a third here,
+	// as the garage camera sees the two spots) and joins the count.
+	o.Observe(at(200), "frigate/events", msg("new", "adj", true, "[200,100,400,250]"))
+	if c := tick(261); len(c) != 1 || c[0].Event.Objects["car"] != 2 {
+		t.Fatalf("adjacent car: %+v", c)
+	}
+
+	// A mover crossing a parked car's box sweeps nothing: only a
+	// stationary claimant owns a spot.
+	o.Observe(at(300), "frigate/events", msg("update", "passer", false, "[104,102,302,252]"))
+	if _, ok := o.tracks["succ"]; !ok {
+		t.Fatal("mover deleted the parked car")
+	}
+}
+
 func TestOccupancyRules(t *testing.T) {
 	o := NewOccupancy([]Watch{{Zone: "side_parking", ArriveAfter: time.Minute, DepartAfter: 5 * time.Minute}})
 	t0 := time.Date(2026, 8, 30, 22, 0, 0, 0, time.UTC)
