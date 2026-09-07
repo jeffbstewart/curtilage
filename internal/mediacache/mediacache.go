@@ -94,6 +94,16 @@ func (c *Cache) Get(key Key) (string, bool) {
 	return e.path, true
 }
 
+// Contains reports whether the cut is cached, without touching its
+// LRU standing: an inventory question (the house page's bolt), not a
+// use.
+func (c *Cache) Contains(key Key) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.entries[key]
+	return ok
+}
+
 // Fill returns the cut's path, fetching and storing it if absent.
 // Concurrent calls for one key share a single fetch; the losers wait.
 // The fetch's reader is drained to disk and closed.
