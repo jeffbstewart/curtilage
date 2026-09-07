@@ -25,6 +25,15 @@ type IncidentConfig struct {
 	// Notable labels are news ANYWHERE, zoned or not: each sighting
 	// passes through as its own household-audience event (a bear).
 	Notable []string
+	// Adjacent is the property's walkable camera graph: which cameras
+	// an actor can move directly between.  A new object joins an open
+	// incident only when its camera adjoins (or is) a member's camera;
+	// otherwise it opens a CONCURRENT incident -- a person on the
+	// porch and a dog in the fenced back yard are two events.  Edges
+	// are made symmetric here however they were written.  Empty: every
+	// camera adjoins every other (time-only clustering, the old
+	// behavior).
+	Adjacent map[string][]string
 }
 
 // DefaultIncidentConfig is what the house starts with.
@@ -37,9 +46,11 @@ func DefaultIncidentConfig() IncidentConfig {
 //
 // Each camera mints its own ids, and one camera re-mints on a lost
 // track, so no object is ever followed across cameras.  Activity is
-// clustered in time instead: a qualifying object that starts within
-// Gap of the open incident's last activity joins it; otherwise it
-// opens a new one.  An incident becomes an event once any member has
+// clustered in time and space instead: a qualifying object joins an
+// open incident when it starts within Gap of the incident's last
+// activity AND its camera adjoins a member's camera (reachable);
+// otherwise it opens a new -- possibly concurrent -- incident.  An
+// incident becomes an event once any member has
 // touched a NAMED zone (the street is not news), ends Gap after its
 // last activity, and every change to what is known about it -- more
 // objects, another zone, a snapshot, the end -- is an update to the
@@ -51,8 +62,13 @@ func DefaultIncidentConfig() IncidentConfig {
 type Incidents struct {
 	cfg    IncidentConfig
 	labels map[string]bool
-	rest   *Passthrough
-	open   *incident
+	// adjacent is the symmetric closure of cfg.Adjacent; nil means
+	// every camera adjoins every other.
+	adjacent map[string]map[string]bool
+	rest     *Passthrough
+	// open incidents, oldest first: adjacency can keep several alive
+	// at once (the porch's person, the back yard's dog).
+	open []*incident
 	// closed remembers objects of ended incidents for a while so a
 	// straggling update for one cannot open a new incident.
 	closed map[string]time.Time
@@ -115,7 +131,44 @@ func NewIncidents(cfg IncidentConfig) *Incidents {
 	for _, l := range cfg.Notable {
 		e.rest.notable[l] = true
 	}
+	if len(cfg.Adjacent) > 0 {
+		e.adjacent = map[string]map[string]bool{}
+		edge := func(a, b string) {
+			if e.adjacent[a] == nil {
+				e.adjacent[a] = map[string]bool{}
+			}
+			e.adjacent[a][b] = true
+		}
+		for cam, ns := range cfg.Adjacent {
+			for _, n := range ns {
+				edge(cam, n)
+				edge(n, cam)
+			}
+		}
+	}
 	return e
+}
+
+// reachable reports whether an actor on camera could have walked out
+// of inc: the camera is, or adjoins, a member's camera.  A camera the
+// graph has never heard of adjoins everything -- a new camera folds
+// rather than isolates until the graph learns it.
+func (e *Incidents) reachable(inc *incident, camera string) bool {
+	if e.adjacent == nil {
+		return true
+	}
+	if _, known := e.adjacent[camera]; !known {
+		return true
+	}
+	for _, m := range inc.members {
+		if m.camera == camera || e.adjacent[camera][m.camera] {
+			return true
+		}
+		if _, known := e.adjacent[m.camera]; !known {
+			return true
+		}
+	}
+	return false
 }
 
 // Undecodable is what could not be parsed, for /metrics.
@@ -125,9 +178,15 @@ func (e *Incidents) Undecodable() uint64 { return e.rest.Undecodable }
 // incident past its gap ends on whatever arrives next, event or not.
 func (e *Incidents) Observe(at time.Time, topic string, payload []byte) []Change {
 	var changes []Change
-	if e.open != nil && at.Sub(e.open.last) >= e.cfg.Gap {
-		changes = append(changes, e.close(at)...)
+	kept := e.open[:0]
+	for _, inc := range e.open {
+		if at.Sub(inc.last) >= e.cfg.Gap {
+			changes = append(changes, e.close(inc, at)...)
+		} else {
+			kept = append(kept, inc)
+		}
 	}
+	e.open = kept
 	if frigate.ParseTopic(topic).Kind != frigate.KindEvents {
 		return changes
 	}
@@ -139,13 +198,30 @@ func (e *Incidents) Observe(at time.Time, topic string, payload []byte) []Change
 	if _, gone := e.closed[obj.ID]; gone {
 		return changes // a straggler from an incident that already ended
 	}
-	if e.open == nil {
+	var inc *incident
+	for _, o := range e.open {
+		if _, ok := o.byID[obj.ID]; ok {
+			inc = o
+			break
+		}
+	}
+	if inc == nil {
 		if msg.Type == frigate.End {
 			return changes // an end for something never seen starting: not news
 		}
-		e.open = &incident{byID: map[string]*member{}}
+		// Join the oldest incident the actor could have walked out of;
+		// nothing reachable opens a concurrent one.
+		for _, o := range e.open {
+			if e.reachable(o, obj.Camera) {
+				inc = o
+				break
+			}
+		}
+		if inc == nil {
+			inc = &incident{byID: map[string]*member{}}
+			e.open = append(e.open, inc)
+		}
 	}
-	inc := e.open
 	inc.last = at
 	m, known := inc.byID[obj.ID]
 	if !known {
@@ -178,12 +254,11 @@ func (e *Incidents) Observe(at time.Time, topic string, payload []byte) []Change
 			m.end = at
 		}
 	}
-	return append(changes, e.emit(at)...)
+	return append(changes, e.emit(inc, at)...)
 }
 
 // emit compares what is now known to what was last said.
-func (e *Incidents) emit(at time.Time) []Change {
-	inc := e.open
+func (e *Incidents) emit(inc *incident, at time.Time) []Change {
 	if len(inc.path) == 0 {
 		return nil // not news until something happens in a named zone
 	}
@@ -200,9 +275,9 @@ func (e *Incidents) emit(at time.Time) []Change {
 }
 
 // close ends the open incident; a never-sent one just disappears.
-func (e *Incidents) close(at time.Time) []Change {
-	inc := e.open
-	e.open = nil
+// close ends one incident (the caller removes it from open); a
+// never-sent one just disappears.
+func (e *Incidents) close(inc *incident, at time.Time) []Change {
 	for id := range inc.byID {
 		e.closed[id] = at
 	}

@@ -37,6 +37,21 @@ message Config {
   // household event (a bear on any camera).  The zone rules exist to
   // mute the street's routine traffic; these labels have no routine.
   repeated string notable_labels = 11;
+  // Which cameras an actor can move directly between.  Activity
+  // clustering folds a new object into an open incident only when its
+  // camera adjoins (or is) a member's camera, so a person on the
+  // porch and a dog in the fenced back yard are two events, not one.
+  // Edges are symmetric however they are written.  No entries at all:
+  // every camera adjoins every other (the old behavior); a camera
+  // absent from every entry adjoins everything (a new camera folds
+  // rather than isolates until the graph learns it).
+  repeated Adjacency adjacency = 12;
+}
+
+// One camera's direct neighbors in the property's walkable graph.
+message Adjacency {
+  string camera = 1;
+  repeated string neighbors = 2;
 }
 
 // One watched state classifier

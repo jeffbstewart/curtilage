@@ -34,6 +34,60 @@ func activities(final map[string]Event) []Event {
 	return out
 }
 
+// A person on the porch and a dog in the fenced back yard at the same
+// moment are two events, not one walk that teleports: the walkable
+// graph keeps disconnected cameras in separate, CONCURRENT incidents.
+func TestDisconnectedCamerasSplitIncidents(t *testing.T) {
+	msg := func(id, cam, label, zone string) []byte {
+		return []byte(fmt.Sprintf(`{"type":"new","after":{"id":%q,"camera":%q,"label":%q,"start_time":0,"end_time":null,`+
+			`"entered_zones":[%q],"current_zones":[%q],"has_snapshot":true,"has_clip":true,"false_positive":false}}`,
+			id, cam, label, zone, zone))
+	}
+	e := NewIncidents(IncidentConfig{Adjacent: map[string][]string{
+		"porch-east": {"porch-down"}, "backyard-gate": {"deck"},
+	}})
+	t0 := time.Date(2026, 9, 7, 15, 0, 0, 0, time.UTC)
+
+	c1 := e.Observe(t0, "frigate/events", msg("p1", "porch-east", "person", "porch"))
+	if len(c1) != 1 || c1[0].Op != OpStarted {
+		t.Fatalf("person: %+v", c1)
+	}
+	porch := c1[0].Event.ID
+	// The dog is in the back yard, unreachable from the porch: its own
+	// incident, concurrently.
+	c2 := e.Observe(t0.Add(5*time.Second), "frigate/events", msg("d1", "backyard-gate", "dog", "yard"))
+	if len(c2) != 1 || c2[0].Op != OpStarted || c2[0].Event.ID == porch {
+		t.Fatalf("dog should open its own incident: %+v", c2)
+	}
+	yard := c2[0].Event.ID
+	if Describe(c2[0].Event) != "A dog in the yard" {
+		t.Errorf("dog sentence: %q", Describe(c2[0].Event))
+	}
+	// An adjoining camera joins the porch incident...
+	c3 := e.Observe(t0.Add(10*time.Second), "frigate/events", msg("p2", "porch-down", "person", "porch"))
+	if len(c3) != 1 || c3[0].Op != OpUpdated || c3[0].Event.ID != porch {
+		t.Fatalf("adjoining camera: %+v", c3)
+	}
+	// ...and a camera the graph never heard of folds rather than
+	// isolates (joins the OLDEST reachable incident).
+	c4 := e.Observe(t0.Add(15*time.Second), "frigate/events", msg("p3", "garage", "person", "driveway"))
+	if len(c4) != 1 || c4[0].Event.ID != porch {
+		t.Fatalf("unknown camera: %+v", c4)
+	}
+	// The gap closes both, separately.
+	ended := e.Observe(t0.Add(2*time.Minute), "frigate/x/status/detect", []byte("ON"))
+	got := map[string]Kind{}
+	for _, c := range ended {
+		if c.Op != OpEnded {
+			t.Fatalf("close: %+v", ended)
+		}
+		got[c.Event.ID] = c.Event.Kind
+	}
+	if len(got) != 2 || got[porch] != KindActivity || got[yard] != KindActivity {
+		t.Fatalf("ended: %+v", got)
+	}
+}
+
 // Box evidence rides the ended activity: each message's box is kept
 // (camera, time, pixels) so the follow view can score cameras, and
 // intermediate revisions stay light.
