@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/captoken"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
+	"github.com/jeffbstewart/curtilage/internal/mediacache"
 	"github.com/jeffbstewart/curtilage/internal/policy"
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
@@ -290,6 +292,109 @@ func TestMediaHandlerRangesOnEndedClip(t *testing.T) {
 	lresp.Body.Close()
 	if lresp.StatusCode != 200 || lresp.Header.Get("Accept-Ranges") != "none" || lresp.Header.Get("ETag") != "" || len(lb) < 4 {
 		t.Errorf("live clip -> %d %v %d bytes", lresp.StatusCode, lresp.Header, len(lb))
+	}
+}
+
+// With the cache wired, an ended event's clip is fetched from Frigate
+// once and served from disk after; a running event serves its newest
+// checkpoint; a just-ended event streams until its final cut settles.
+func TestServeCachedClip(t *testing.T) {
+	fetches := 0
+	fr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/cam-a/start/") && strings.HasSuffix(r.URL.Path, "/clip.mp4") {
+			fetches++
+			w.Header().Set("Content-Type", "video/mp4")
+			w.Write([]byte("mp4" + r.URL.Path))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer fr.Close()
+	fc, err := frigate.NewClient(fr.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kr, err := captoken.New(bytes.Repeat([]byte{1}, captoken.MinKeyLen), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mc, err := mediacache.New(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Version: "test", Store: store.New(time.Hour), Frigate: fc, Keys: kr, LinkTTL: time.Hour, Cache: mc}
+	web := httptest.NewServer(s.MediaHandler())
+	defer web.Close()
+	now := time.Now()
+	get := func(e policy.Event, hdr map[string]string) *http.Response {
+		t.Helper()
+		link, err := s.Link(e, curtilagev1.Media_MEDIA_CLIP, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, _ := http.NewRequest(http.MethodGet, web.URL+link, nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	// Ended long enough ago that the final cut has settled: one
+	// Frigate fetch serves every request after.
+	ended := policy.Event{ID: "done", Camera: "cam-a", Label: "car", Kind: policy.KindDetection,
+		StartedAt: now.Add(-2 * time.Minute), EndedAt: now.Add(-time.Minute), SourceID: "src-done"}
+	s.Store.Apply(now, policy.Change{Op: policy.OpStarted, Event: ended})
+	r1 := get(ended, nil)
+	b1, _ := io.ReadAll(r1.Body)
+	r1.Body.Close()
+	if r1.StatusCode != 200 || r1.Header.Get("ETag") == "" || !strings.HasPrefix(string(b1), "mp4/api/cam-a/") {
+		t.Fatalf("first GET -> %d %v %q", r1.StatusCode, r1.Header, b1)
+	}
+	r2 := get(ended, map[string]string{"Range": "bytes=0-2"})
+	b2, _ := io.ReadAll(r2.Body)
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusPartialContent || string(b2) != "mp4" || fetches != 1 {
+		t.Fatalf("cached range -> %d %q after %d fetches", r2.StatusCode, b2, fetches)
+	}
+
+	// Running for 40s: the 30s checkpoint is the cut, and repeat
+	// views share it.
+	live := policy.Event{ID: "live", Camera: "cam-a", Label: "car", Kind: policy.KindDetection,
+		StartedAt: now.Add(-40 * time.Second), SourceID: "src-live"}
+	s.Store.Apply(now, policy.Change{Op: policy.OpStarted, Event: live})
+	cp := live.StartedAt.Add(30 * time.Second)
+	r3 := get(live, nil)
+	b3, _ := io.ReadAll(r3.Body)
+	r3.Body.Close()
+	if r3.StatusCode != 200 || !strings.Contains(string(b3), fmt.Sprintf("/end/%d/", cp.Unix())) {
+		t.Fatalf("checkpoint GET -> %d %q, want end %d", r3.StatusCode, b3, cp.Unix())
+	}
+	before := fetches
+	r4 := get(live, nil)
+	io.Copy(io.Discard, r4.Body)
+	r4.Body.Close()
+	if fetches != before {
+		t.Fatalf("second checkpoint view refetched (%d -> %d)", before, fetches)
+	}
+
+	// Just ended: the final cut has not settled, so nothing is cached
+	// and the direct path serves.
+	fresh := policy.Event{ID: "fresh", Camera: "cam-a", Label: "car", Kind: policy.KindDetection,
+		StartedAt: now.Add(-time.Minute), EndedAt: now, SourceID: "src-fresh"}
+	s.Store.Apply(now, policy.Change{Op: policy.OpStarted, Event: fresh})
+	entries := mc.Stats().Entries
+	r5 := get(fresh, nil)
+	b5, _ := io.ReadAll(r5.Body)
+	r5.Body.Close()
+	if r5.StatusCode != 200 || !strings.HasPrefix(string(b5), "mp4/api/cam-a/") {
+		t.Fatalf("fresh GET -> %d %q", r5.StatusCode, b5)
+	}
+	if got := mc.Stats().Entries; got != entries {
+		t.Fatalf("unsettled cut was cached (%d -> %d entries)", entries, got)
 	}
 }
 

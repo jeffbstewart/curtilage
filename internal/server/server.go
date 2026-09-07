@@ -20,6 +20,7 @@ import (
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
 	"github.com/jeffbstewart/curtilage/internal/captoken"
 	"github.com/jeffbstewart/curtilage/internal/frigate"
+	"github.com/jeffbstewart/curtilage/internal/mediacache"
 	"github.com/jeffbstewart/curtilage/internal/policy"
 	"github.com/jeffbstewart/curtilage/internal/store"
 )
@@ -47,6 +48,10 @@ type Server struct {
 	Frigate *frigate.Client
 	Keys    *captoken.Keyring
 	LinkTTL time.Duration
+	// Cache holds immutable cuts so panes and the warmer (warm.go)
+	// share one Frigate fetch each; nil serves every request straight
+	// from Frigate as before.
+	Cache *mediacache.Cache
 }
 
 // Register attaches s to gs.
