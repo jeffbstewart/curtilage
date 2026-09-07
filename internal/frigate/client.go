@@ -2,6 +2,7 @@ package frigate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,6 +50,44 @@ type Media struct {
 	// Size in bytes, or -1 when Frigate did not say.
 	Size int64
 	Body io.ReadCloser
+}
+
+// DetectDims is each camera's detect resolution from Frigate's
+// config API: the pixel space Object.Box coordinates live in, needed
+// to compare boxes across cameras.
+func (c *Client) DetectDims(ctx context.Context) (map[string][2]int, error) {
+	u := *c.base
+	u.Path += "/api/config"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("frigate: /api/config: %s", resp.Status)
+	}
+	var cfg struct {
+		Cameras map[string]struct {
+			Detect struct {
+				Width  int `json:"width"`
+				Height int `json:"height"`
+			} `json:"detect"`
+		} `json:"cameras"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("frigate: /api/config: %w", err)
+	}
+	dims := make(map[string][2]int, len(cfg.Cameras))
+	for name, cam := range cfg.Cameras {
+		if cam.Detect.Width > 0 && cam.Detect.Height > 0 {
+			dims[name] = [2]int{cam.Detect.Width, cam.Detect.Height}
+		}
+	}
+	return dims, nil
 }
 
 // Snapshot is the event's still with its bounding box, JPEG.

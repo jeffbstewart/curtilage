@@ -73,6 +73,27 @@ type incident struct {
 	path    []string // named zones, order first entered
 	sent    bool     // Started has been emitted
 	event   Event    // as last emitted
+	boxes   []BoxSample
+}
+
+// maxBoxSamples caps an incident's box evidence.  At the cap the set
+// is THINNED -- every second sample dropped -- so a long incident
+// keeps whole-timeline coverage at half density instead of losing its
+// opening.
+const maxBoxSamples = 2048
+
+func (inc *incident) addBox(camera string, at time.Time, box []float64) {
+	if len(inc.boxes) >= maxBoxSamples {
+		kept := inc.boxes[:0]
+		for i, b := range inc.boxes {
+			if i%2 == 0 {
+				kept = append(kept, b)
+			}
+		}
+		inc.boxes = kept
+	}
+	inc.boxes = append(inc.boxes, BoxSample{Camera: camera, At: at,
+		Box: [4]float32{float32(box[0]), float32(box[1]), float32(box[2]), float32(box[3])}})
 }
 
 // NewIncidents returns an engine with cfg (zero fields take defaults).
@@ -147,6 +168,9 @@ func (e *Incidents) Observe(at time.Time, topic string, payload []byte) []Change
 		if z != "" && !slices.Contains(inc.path, z) {
 			inc.path = append(inc.path, z)
 		}
+	}
+	if len(obj.Box) == 4 {
+		inc.addBox(obj.Camera, at, obj.Box)
 	}
 	if msg.Type == frigate.End {
 		m.end = obj.EndTime.Time()
@@ -260,6 +284,7 @@ func (e *Incidents) build(inc *incident, at time.Time, ended bool) Event {
 	ev.Label = primaryLabel(ev.Objects)
 	if ended {
 		ev.EndedAt = last
+		ev.Boxes = slices.Clone(inc.boxes)
 	}
 	switch {
 	case !anyClip:
