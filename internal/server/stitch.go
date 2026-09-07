@@ -144,38 +144,64 @@ func (s *Server) stitch(ctx context.Context, e policy.Event, variant string) err
 	if variant == "hi" {
 		w, h, crf = 1280, 720, "23"
 	}
-	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
-	var filters, refs []string
-	for i, seg := range cut {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", seg.S), "-t", fmt.Sprintf("%.3f", seg.E-seg.S), "-i", paths[seg.C])
-		filters = append(filters, fmt.Sprintf(
-			"[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=15[v%d]",
-			i, w, h, w, h, i))
-		refs = append(refs, fmt.Sprintf("[v%d]", i))
+	// One shot at a time: the inputs are full-resolution recordings
+	// (some 4K), and a single decoder is already a few hundred MB --
+	// opening one PER SEGMENT at once OOM-killed the 512Mi pod
+	// (2026-09-07 18:25).  Each shot renders alone to an mpegts
+	// intermediate at target size; the final pass stream-copies them
+	// together (concat demuxer, near-zero memory).
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	began := time.Now()
+	work, err := os.MkdirTemp(filepath.Dir(paths[cut[0].C]), "stitch-work-")
+	if err != nil {
+		return err
 	}
-	fc := strings.Join(filters, ";") + ";" + strings.Join(refs, "") +
-		fmt.Sprintf("concat=n=%d:v=1:a=0[v]", len(cut))
+	defer os.RemoveAll(work)
+	vf := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=15", w, h, w, h)
+	var list strings.Builder
+	for i, seg := range cut {
+		shot := filepath.Join(work, fmt.Sprintf("shot%03d.ts", i))
+		if err := runFFmpeg(cctx,
+			"-threads", "2",
+			"-ss", fmt.Sprintf("%.3f", seg.S), "-t", fmt.Sprintf("%.3f", seg.E-seg.S), "-i", paths[seg.C],
+			"-vf", vf,
+			"-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-threads", "2",
+			"-an", "-f", "mpegts", shot); err != nil {
+			return fmt.Errorf("shot %d (%s): %w", i, seg.C, err)
+		}
+		fmt.Fprintf(&list, "file '%s'\n", filepath.ToSlash(shot))
+	}
+	listPath := filepath.Join(work, "shots.txt")
+	if err := os.WriteFile(listPath, []byte(list.String()), 0o644); err != nil {
+		return err
+	}
 	out, err := os.CreateTemp(filepath.Dir(paths[cut[0].C]), "stitch-*.part")
 	if err != nil {
 		return err
 	}
 	out.Close()
 	defer os.Remove(out.Name()) // no-op once Put has renamed it away
-	args = append(args, "-filter_complex", fc, "-map", "[v]",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-threads", "2",
-		"-movflags", "+faststart", "-an", "-f", "mp4", out.Name())
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(cctx, ffmpegPath, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	began := time.Now()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
+	if err := runFFmpeg(cctx,
+		"-f", "concat", "-safe", "0", "-i", listPath,
+		"-c", "copy", "-movflags", "+faststart", "-f", "mp4", out.Name()); err != nil {
+		return fmt.Errorf("concat: %w", err)
 	}
 	if err := s.PutStitch(e, variant, out.Name()); err != nil {
 		return err
 	}
 	log.Printf("stitch: %s %s: %d shots, %s", e.ID, variant, len(cut), time.Since(began).Round(time.Second))
+	return nil
+}
+
+// runFFmpeg runs one invocation with the quiet common flags.
+func runFFmpeg(ctx context.Context, args ...string) error {
+	full := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}, args...)
+	cmd := exec.CommandContext(ctx, ffmpegPath, full...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
 	return nil
 }
