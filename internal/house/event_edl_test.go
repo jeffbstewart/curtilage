@@ -41,6 +41,10 @@ func TestEventPageCarriesEDL(t *testing.T) {
 	if !strings.Contains(body, `"c":"porch-down"`) || !strings.Contains(body, `"c":"driveway-down"`) {
 		t.Errorf("page lacks the scored cut: %.300s", body[strings.Index(body, "const edl"):])
 	}
+	// No cache on this handler: nothing can render, so no promise.
+	if strings.Contains(body, "stitched view rendering") {
+		t.Error("rendering promised without a cache")
+	}
 	// The walk activity has no box evidence: its page keeps an empty
 	// cut and the span heuristic drives.
 	if _, body := get(t, h, "192.168.1.50:1", "", "event/walk"); !strings.Contains(body, "const edl = [];") {
@@ -58,19 +62,27 @@ func TestStitchRouteAndPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.API.Cache = mc
+	h.API.SetDetectDims(edlDims)
 	now := h.Now()
 	e := policy.Event{ID: "chase", Kind: policy.KindActivity, Camera: "porch-down",
 		Cameras: []string{"porch-down", "driveway-down"}, Label: "person",
 		Objects: map[string]int{"person": 1}, Path: []string{"porch"}, Zones: []string{"porch"},
 		StartedAt: now.Add(-10 * time.Minute), EndedAt: now.Add(-9 * time.Minute),
 		SourceID: "src-chase", SourceIDs: []string{"src-chase"}}
+	samplesEvery(&e, "porch-down", e.StartedAt, 0, 20*time.Second, [4]float32{0, 0, 200, 200})
 	h.Store.Apply(now, policy.Change{Op: policy.OpEnded, Event: e})
 
 	if code, _ := get(t, h, "192.168.1.50:1", "", "stitch/chase"); code != 404 {
 		t.Fatalf("unstitched -> %d", code)
 	}
-	if _, body := get(t, h, "192.168.1.50:1", "", "event/chase"); strings.Contains(body, `id="tabstitch"`) {
+	_, before := get(t, h, "192.168.1.50:1", "", "event/chase")
+	if strings.Contains(before, `id="tabstitch"`) {
 		t.Error("page offers a stitched tab before the render exists")
+	}
+	// Being looked at is the on-demand trigger: the page queues a
+	// render and says so.
+	if !strings.Contains(before, "stitched view rendering") {
+		t.Error("page did not promise the queued render")
 	}
 
 	f := filepath.Join(t.TempDir(), "render.mp4")
@@ -89,6 +101,9 @@ func TestStitchRouteAndPage(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %q", want)
 		}
+	}
+	if strings.Contains(page, "stitched view rendering") {
+		t.Error("still promising a render that exists")
 	}
 	if strings.Contains(page, `id="stitchhd"`) {
 		t.Error("720p offered before the hi render exists")
