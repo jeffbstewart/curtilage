@@ -88,6 +88,41 @@ func TestFillSingleFlight(t *testing.T) {
 	}
 }
 
+// Fills of distinct keys are bounded at maxFills: the dirty-page
+// budget that OOM-killed the 128Mi pod is capped, not per-key.
+func TestFillConcurrencyBounded(t *testing.T) {
+	c, _ := New(t.TempDir(), 1<<20)
+	var running, peak atomic.Int32
+	release := make(chan struct{})
+	fetch := func(context.Context) (io.ReadCloser, error) {
+		n := running.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		<-release
+		running.Add(-1)
+		return io.NopCloser(strings.NewReader("x")), nil
+	}
+	var wg sync.WaitGroup
+	for i := range maxFills + 3 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.Fill(context.Background(), Key{Media: "clip", Ref: "cam", Start: int64(i), End: int64(i) + 1}, fetch)
+		}()
+	}
+	for running.Load() < maxFills {
+	}
+	close(release)
+	wg.Wait()
+	if p := peak.Load(); p > maxFills {
+		t.Fatalf("%d concurrent fills, cap is %d", p, maxFills)
+	}
+}
+
 func TestBudgetEvictsLRU(t *testing.T) {
 	c, _ := New(t.TempDir(), 25) // room for two 10-byte cuts
 	k1 := Key{Media: "clip", Ref: "a", Start: 1, End: 2}

@@ -53,6 +53,16 @@ type flight struct {
 	err  error
 }
 
+// A pod's memory limit charges the page cache its own writes dirty:
+// several concurrent clip fills streaming to disk at LAN speed
+// out-ran writeback and OOM-killed a 128Mi pod (2026-09-07).  Two
+// bounds keep the dirty set small: at most maxFills fills at once,
+// and each fill fsyncs every dirtyWindow bytes.
+const (
+	maxFills    = 4
+	dirtyWindow = 8 << 20
+)
+
 // Cache is the store.  Safe for concurrent use.
 type Cache struct {
 	dir    string
@@ -63,6 +73,7 @@ type Cache struct {
 	inflight map[Key]*flight
 	size     int64
 	seq      uint64
+	fills    chan struct{} // maxFills tokens
 }
 
 // New empties dir (creating it if needed) and returns a cache that
@@ -78,7 +89,8 @@ func New(dir string, budget int64) (*Cache, error) {
 	for _, n := range names {
 		os.Remove(filepath.Join(dir, n.Name()))
 	}
-	return &Cache{dir: dir, budget: budget, entries: map[Key]*entry{}, inflight: map[Key]*flight{}}, nil
+	return &Cache{dir: dir, budget: budget, entries: map[Key]*entry{}, inflight: map[Key]*flight{},
+		fills: make(chan struct{}, maxFills)}, nil
 }
 
 // Get returns the path of a completed cut and marks it used.
@@ -137,6 +149,12 @@ func (c *Cache) Fill(ctx context.Context, key Key, fetch func(context.Context) (
 }
 
 func (c *Cache) fill(ctx context.Context, key Key, fetch func(context.Context) (io.ReadCloser, error)) (string, error) {
+	select {
+	case c.fills <- struct{}{}:
+		defer func() { <-c.fills }()
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 	body, err := fetch(ctx)
 	if err != nil {
 		return "", err
@@ -148,7 +166,7 @@ func (c *Cache) fill(ctx context.Context, key Key, fetch func(context.Context) (
 	if err != nil {
 		return "", err
 	}
-	n, err := io.Copy(w, body)
+	n, err := copySynced(w, body)
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
@@ -166,6 +184,34 @@ func (c *Cache) fill(ctx context.Context, key Key, fetch func(context.Context) (
 	c.size += n
 	c.shed()
 	return path, nil
+}
+
+// copySynced is io.Copy with an fsync every dirtyWindow bytes, so a
+// fill never holds more than one window of dirty page cache.
+func copySynced(w *os.File, body io.Reader) (int64, error) {
+	buf := make([]byte, 256<<10)
+	var n, unsynced int64
+	for {
+		r, rerr := body.Read(buf)
+		if r > 0 {
+			if _, werr := w.Write(buf[:r]); werr != nil {
+				return n, werr
+			}
+			n += int64(r)
+			if unsynced += int64(r); unsynced >= dirtyWindow {
+				if serr := w.Sync(); serr != nil {
+					return n, serr
+				}
+				unsynced = 0
+			}
+		}
+		if rerr == io.EOF {
+			return n, nil
+		}
+		if rerr != nil {
+			return n, rerr
+		}
+	}
 }
 
 // shed evicts least-recently-used entries until the budget holds.
