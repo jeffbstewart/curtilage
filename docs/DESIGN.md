@@ -247,6 +247,56 @@ finished clip when Frigate has cut it.
   identities; then a small OIDC provider fronting passkeys is the
   thing, and curtilage becomes its first client.
 
+### gRPC authentication (decided 2026-09-07)
+
+The device-to-server credential, settled in one sitting; the relay
+and notifications are a separate conversation.
+
+- **The credential is an opaque bearer token**: 256 random bits per
+  device, minted at enrollment, stored HASHED in the device registry,
+  sent as `authorization` metadata on every call.  A registry must
+  exist anyway (names, revocation), so a stateless signed token buys
+  nothing.  Face ID is the LOCAL lock, not the wire credential: the
+  token lives in the Keychain behind `biometryCurrentSet`, so using
+  it prompts the face and the entry dies if the enrolled faces
+  change.  The server never knows.  A Secure-Enclave keypair can
+  layer on in the App Attest era without discarding any of this.
+- **Everything requires the token except an explicit short list**:
+  `Hello` (new; protocol versions and supported auth methods, nothing
+  more -- `GetServerInfo` names the house and stays authenticated),
+  `Enroll` (authorised by the QR's one-time secret), and `Logout`,
+  which succeeds with or without a valid credential -- a revoked
+  device saying goodbye is a no-op success, never an error.  Full
+  capability discovery happens after authentication.
+- **Tokens are long-lived until revoked** (or logged out).  Household
+  scale: revocation is one press on the admin page, there is no
+  refresh choreography to get wrong, and the registry's last-seen
+  column shows stale devices.
+- **Enrollment requires the administrator**: an admin passkey
+  (WebAuthn; the house page, TLS'd at the proxy, is the relying
+  party) opens a short-lived admin session, which can mint a one-use,
+  short-TTL enrollment QR.  Scanning it is the approval -- the admin
+  was standing there -- so the human queue waits for the App Attest
+  era.  The admin session also lists, renames and revokes devices and
+  registers further passkeys (a second phone, a hardware key).
+- **Bootstrap**: while the passkey registry is empty, the
+  subnet-gated house page offers "register admin passkey"; the first
+  registration closes that door.
+- **Persistence**: devices and passkeys in a small file beside the
+  recordings on the media volume (the pruner only touches
+  `curtilage-*.mcap`).
+- **Prior art: touchvault** (same author) verifies FIDO2 hardware
+  attestation with the stdlib alone, and its architecture is the one
+  to copy: the transport judges nothing, the core owns every trust
+  decision behind an interface a fake can reach, so ceremonies test
+  without hardware -- here, without a browser.  The browser case
+  differs where WebAuthn differs: the ceremony binds origin and RP
+  id, the challenge lives in a server session, and a platform
+  passkey's attestation is usually "none", so touchvault's
+  genuine-hardware gate does not carry over for iCloud passkeys.
+  Whether the verifier is go-webauthn or an in-repo minimal one in
+  touchvault's style is decided at build time, not tonight.
+
 ## Credentials, by tier
 
 - **MQTT account**: committed in the household's private config repo
