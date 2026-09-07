@@ -49,6 +49,10 @@ timezone: "America/New_York"
 occupancy { zone: "side_parking" }
 occupancy { zone: "left_parking_space" }
 occupancy { zone: "right_parking_space" }
+# The ledger is label-generic: package delivery/pickup is the same
+# watch.  A zone named for its label alone ("packages") makes the
+# sentence locate by camera: "A package arrived (porch-down)".
+occupancy { zone: "packages" labels: "package" }
 
 # State classifiers, believed slowly: a raw change must hold before
 # it counts (the sensors lie for seconds-to-minutes at a time).
