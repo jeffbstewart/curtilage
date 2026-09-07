@@ -12,6 +12,7 @@
 package house
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -21,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
@@ -52,6 +54,44 @@ type Handler struct {
 	States *policy.States
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
+
+	// Frigate's per-camera detect resolutions (the space box samples
+	// are in), fetched lazily and refreshed at most every 10m when an
+	// event names a camera we have no dims for.
+	dimsMu sync.Mutex
+	dims   map[string][2]int
+	dimsAt time.Time
+}
+
+// detectDims returns the detect resolutions, fetching from Frigate
+// when a wanted camera is unknown (rate-limited).  nil or a partial
+// map is fine: an unscored camera never wins the EDL, and an empty
+// EDL falls back to the span heuristic.
+func (h *Handler) detectDims(cams []string) map[string][2]int {
+	h.dimsMu.Lock()
+	defer h.dimsMu.Unlock()
+	missing := h.dims == nil
+	for _, c := range cams {
+		if _, ok := h.dims[c]; !ok {
+			missing = true
+		}
+	}
+	if !missing || time.Since(h.dimsAt) < 10*time.Minute {
+		return h.dims
+	}
+	if h.API == nil || h.API.Frigate == nil {
+		return h.dims
+	}
+	h.dimsAt = time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	d, err := h.API.Frigate.DetectDims(ctx)
+	if err != nil {
+		log.Printf("house: detect dims: %v", err)
+		return h.dims
+	}
+	h.dims = d
+	return d
 }
 
 func (h *Handler) loc() *time.Location {
@@ -443,6 +483,7 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 		Panes                             []pane
 		History                           []string
 		SpansJSON                         template.JS
+		EDLJSON                           template.JS
 		Badge                             buildBadge
 		// Window is the clip window in seconds (duration plus both
 		// margins) once the event has ended: the authoritative
@@ -514,6 +555,16 @@ func (h *Handler) event(w http.ResponseWriter, id string) {
 	if b, err := json.Marshal(spans); err == nil {
 		p.SpansJSON = template.JS(b)
 	}
+	// The scored cut (edl.go), for ended events with box evidence:
+	// follow mode plays it; empty means the span heuristic drives.
+	p.EDLJSON = template.JS("[]")
+	if !e.Running() && len(e.Boxes) > 0 {
+		if edl := buildEDL(e, clipStart, end.Add(5*time.Second), h.detectDims(cams)); len(edl) > 0 {
+			if b, err := json.Marshal(edl); err == nil {
+				p.EDLJSON = template.JS(b)
+			}
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -570,6 +621,7 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 <div class="build">curtilage {{if .Badge.PR}}<a href="{{.Badge.PRURL}}">PR #{{.Badge.PR}}</a> {{end}}{{if .Badge.URL}}<a href="{{.Badge.URL}}">{{.Badge.Short}}</a>{{else}}{{.Badge.Short}}{{end}} built {{.Badge.Built}}</div>
 <script>
 const spans = {{.SpansJSON}};
+const edl = {{.EDLJSON}}; // the scored cut; empty -> spans drive
 const windowDur = {{.Window}}; // authoritative once ended; 0 while live
 const panes = [...document.querySelectorAll('.pane')];
 const vids = panes.map(p => p.querySelector('video'));
@@ -586,6 +638,10 @@ const LAG = 2.5;
 let pinned = null;
 function best(t) {
   if (pinned) return pinned;
+  // The scored cut decides when it exists (box-area evidence,
+  // hysteresis, gaps held -- edl.go); spans are the fallback.
+  for (const g of edl) if (g.s <= t && t < g.e) return g.c;
+  if (edl.length) return edl[edl.length - 1].c;
   let c = null, s = -1;
   for (const sp of spans) {
     const e = Math.max(sp.e - LAG, sp.s + 0.7);

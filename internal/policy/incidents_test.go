@@ -34,6 +34,50 @@ func activities(final map[string]Event) []Event {
 	return out
 }
 
+// Box evidence rides the ended activity: each message's box is kept
+// (camera, time, pixels) so the follow view can score cameras, and
+// intermediate revisions stay light.
+func TestActivityCarriesBoxes(t *testing.T) {
+	e := NewIncidents(IncidentConfig{})
+	t0 := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	msg := func(typ, id, cam, box string) []byte {
+		return []byte(fmt.Sprintf(`{"type":%q,"after":{"id":%q,"camera":%q,"label":"person","start_time":%d,"end_time":null,`+
+			`"entered_zones":["porch"],"current_zones":["porch"],"has_snapshot":true,"has_clip":true,"false_positive":false,"box":%s}}`,
+			typ, id, cam, t0.Unix(), box))
+	}
+	c1 := e.Observe(t0, "frigate/events", msg("new", "p1", "porch-down", "[10,10,110,210]"))
+	if len(c1) != 1 || len(c1[0].Event.Boxes) != 0 {
+		t.Fatalf("started change carries boxes: %+v", c1)
+	}
+	e.Observe(t0.Add(5*time.Second), "frigate/events", msg("update", "p1", "porch-down", "[20,10,140,220]"))
+	e.Observe(t0.Add(10*time.Second), "frigate/events", msg("end", "p1", "porch-down", "[30,10,150,220]"))
+	ended := e.Observe(t0.Add(2*time.Minute), "frigate/x/status/detect", []byte("ON"))
+	if len(ended) != 1 || ended[0].Op != OpEnded {
+		t.Fatalf("end: %+v", ended)
+	}
+	b := ended[0].Event.Boxes
+	if len(b) != 3 || b[0].Camera != "porch-down" || b[1].At != t0.Add(5*time.Second) ||
+		b[2].Box != [4]float32{30, 10, 150, 220} {
+		t.Fatalf("boxes: %+v", b)
+	}
+}
+
+// At the cap the sample set thins -- every second sample dropped --
+// so a long incident keeps whole-timeline coverage.
+func TestBoxSamplesThinAtTheCap(t *testing.T) {
+	inc := &incident{}
+	t0 := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	for i := range maxBoxSamples + 1 {
+		inc.addBox("cam", t0.Add(time.Duration(i)*time.Second), []float64{0, 0, 1, 1})
+	}
+	if n := len(inc.boxes); n != maxBoxSamples/2+1 {
+		t.Fatalf("%d samples after thinning, want %d", n, maxBoxSamples/2+1)
+	}
+	if !inc.boxes[0].At.Equal(t0) || !inc.boxes[len(inc.boxes)-1].At.Equal(t0.Add(maxBoxSamples*time.Second)) {
+		t.Fatalf("coverage lost: %v .. %v", inc.boxes[0].At, inc.boxes[len(inc.boxes)-1].At)
+	}
+}
+
 // The dog walk out: 26 Frigate objects across six cameras become one
 // activity that ends, with the right people, dog, and path.
 func TestWalkOutIsOneActivity(t *testing.T) {

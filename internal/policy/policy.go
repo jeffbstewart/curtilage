@@ -86,6 +86,21 @@ type Event struct {
 	// Spans is when each camera saw something, one per underlying
 	// object: the switching signal for a follow-the-action view.
 	Spans []Span
+	// Boxes is where the cameras saw it: sparse detection-box reports
+	// (Frigate publishes on change, not per frame), attached only once
+	// the event has ENDED -- intermediate revisions stay light.  The
+	// evidence a follow-the-subject cut is scored from.
+	Boxes []BoxSample
+}
+
+// BoxSample is one detection-box report: where camera saw a subject
+// at at, as [x1, y1, x2, y2] in that camera's detect-resolution
+// pixels (normalize with the camera's detect dims before comparing
+// across cameras).
+type BoxSample struct {
+	Camera string
+	At     time.Time
+	Box    [4]float32
 }
 
 // Span is one camera's sighting within an activity.

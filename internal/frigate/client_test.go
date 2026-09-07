@@ -3,6 +3,7 @@ package frigate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -94,6 +95,25 @@ func TestClip(t *testing.T) {
 	}
 	if _, err := c.Clip(ctx, "porch-north", end, start); !errors.Is(err, ErrNotFound) {
 		t.Errorf("inverted range -> %v", err)
+	}
+}
+
+func TestDetectDims(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/config" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"cameras":{"porch-down":{"detect":{"width":640,"height":360}},"deck":{"detect":{"width":640,"height":480}},"broken":{"detect":{}}}}`)
+	}))
+	defer srv.Close()
+	c, _ := NewClient(srv.URL)
+	dims, err := c.DetectDims(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dims) != 2 || dims["porch-down"] != [2]int{640, 360} || dims["deck"] != [2]int{640, 480} {
+		t.Fatalf("dims: %v", dims)
 	}
 }
 
