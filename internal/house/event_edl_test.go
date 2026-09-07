@@ -76,11 +76,11 @@ func TestStitchRouteAndPage(t *testing.T) {
 		t.Fatalf("unstitched -> %d", code)
 	}
 	_, before := get(t, h, "192.168.1.50:1", "", "event/chase")
-	if strings.Contains(before, `id="tabstitch"`) {
-		t.Error("page offers a stitched tab before the render exists")
+	if !strings.Contains(before, `id="tabstitch" style="display:none"`) {
+		t.Error("pre-render page should carry the hidden stitched tab for the poll to reveal")
 	}
 	// Being looked at is the on-demand trigger: the page queues a
-	// render and says so.
+	// render, says so, and polls for readiness.
 	if !strings.Contains(before, "stitched view rendering") {
 		t.Error("page did not promise the queued render")
 	}
@@ -97,10 +97,15 @@ func TestStitchRouteAndPage(t *testing.T) {
 		t.Fatalf("stitched -> %d %q", code, body)
 	}
 	_, page := get(t, h, "192.168.1.50:1", "", "event/chase")
-	for _, want := range []string{`id="tabstitch"`, `/house/stitch/chase?v=lo`, `preload="none"`} {
+	for _, want := range []string{`id="tabstitch" class="on"`, `/house/stitch/chase?v=lo`, `preload="none"`,
+		`download="curtilage-chase.mp4"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("event page lacks %q", want)
 		}
+	}
+	// The index marks the rendered stitch beside the cache bolt.
+	if _, index := get(t, h, "192.168.1.50:1", "", "?view=all"); !strings.Contains(index, "&#127916;") {
+		t.Error("house index lacks the stitch marker")
 	}
 	if strings.Contains(page, "stitched view rendering") {
 		t.Error("still promising a render that exists")

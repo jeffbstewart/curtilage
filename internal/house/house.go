@@ -152,6 +152,7 @@ type row struct {
 	Thumb    string // media link path, or ""
 	Live     bool
 	Cached   bool // every camera's current cut is on disk: opens instantly
+	Stitched bool // the stitched follow view is rendered
 	SourceID string
 	// What is the one sentence (policy.Describe); History is every
 	// earlier sentence, newest first, with when it was said -- how the
@@ -353,6 +354,7 @@ func (h *Handler) row(e policy.Event, now time.Time) row {
 	}
 	if h.API != nil {
 		rw.Cached = h.API.ClipCached(e)
+		rw.Stitched = h.API.StitchCached(e, "lo")
 	}
 	return rw
 }
@@ -410,7 +412,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
  <td class="z"><b><a class="ev" href="/house/event/{{.ID}}">{{.What}}</a></b> <a class="mc" href="/house/event/{{.ID}}">[multi-camera view]</a>{{if .History}}<ul class="hist">{{range .History}}<li>{{.}}</li>{{end}}</ul>{{end}}<br><span class="src">{{.Label}} {{.SourceID}}</span></td>
  <td class="z">{{.Zones}}</td>
  <td>{{.Duration}}</td>
- <td>{{.Clip}}{{if .Cached}} <span title="cached: opens instantly">&#9889;</span>{{end}}</td>
+ <td>{{.Clip}}{{if .Cached}} <span title="cached: opens instantly">&#9889;</span>{{end}}{{if .Stitched}} <span title="stitched view rendered">&#127916;</span>{{end}}</td>
  <td>{{.Verdict}}</td>
  <td class="{{if eq .Audience "household"}}aud-household{{else}}aud-nobody{{end}}">{{.Audience}}</td>
  <td>{{if .Thumb}}<a href="{{.Thumb}}"><img src="{{.Thumb}}" alt="" loading="lazy"></a>{{end}}</td>
@@ -630,13 +632,13 @@ var eventTmpl = template.Must(template.New("event").Parse(`<!doctype html>
 <h1>{{.What}}</h1>
 <div class="sub">{{.When}}, {{.Duration}}{{if .Live}} -- still running (reload for more){{end}}. All panes show the same moment; click one to enlarge. The <span style="color:#b00;font-weight:600">red outline</span> is where the follow tab would look right now; in follow, click a thumbnail to pin it. <a href="/house/">back to the house</a></div>
 <div class="bar">
- <span class="tabs">{{if .StitchLo}}<button id="tabstitch" class="on">stitched</button>{{end}}<button id="tabgrid">grid</button><button id="tabfollow"{{if not .StitchLo}} class="on"{{end}}>follow</button></span>
+ <span class="tabs">{{if or .StitchLo .Stitching}}<button id="tabstitch"{{if .StitchLo}} class="on"{{else}} style="display:none"{{end}}>stitched</button>{{end}}<button id="tabgrid">grid</button><button id="tabfollow"{{if not .StitchLo}} class="on"{{end}}>follow</button></span>
  <button id="play">play</button>
  <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
  <span id="clock">0:00</span>
- {{if .Stitching}}<span class="sub">stitched view rendering; reload in a moment</span>{{end}}
+ {{if .Stitching}}<span class="sub" id="stitching">stitched view rendering&#8230;</span>{{end}}
 </div>
-{{if .StitchLo}}<div class="stitchbox"><span class="cam" id="stitchcam"></span>{{if .StitchHi}}<button class="hd" id="stitchhd">720p</button>{{end}}<video id="stitchvid" controls playsinline src="/house/stitch/{{.ID}}?v=lo"></video></div>
+{{if or .StitchLo .Stitching}}<div class="stitchbox"><span class="cam" id="stitchcam"></span>{{if .StitchHi}}<button class="hd" id="stitchhd">720p</button>{{end}}<video id="stitchvid" controls playsinline{{if .StitchLo}} src="/house/stitch/{{.ID}}?v=lo"{{end}}></video><div class="sub" id="stitchdl">{{if .StitchLo}}<a href="/house/stitch/{{.ID}}?v={{if .StitchHi}}hi{{else}}lo{{end}}" download="curtilage-{{.ID}}.mp4">download</a>{{end}}</div></div>
 {{end}}<div class="grid" id="grid">
 {{range .Panes}} <div class="pane" data-cam="{{.Camera}}"><span class="cam">{{.Camera}}</span><video {{if $.StitchLo}}preload="none"{{else}}autoplay preload="auto"{{end}} muted playsinline src="{{.Src}}"></video></div>
 {{end}}</div>
@@ -724,13 +726,24 @@ function startGrid() {
   vids.forEach(v => { v.preload = 'auto'; v.play().catch(() => {}); });
 }
 function setMode(m) {
+  const wasStitch = document.body.classList.contains('stitch');
   document.body.classList.toggle('stitch', m === 'stitch');
   document.body.classList.toggle('follow', m === 'follow');
   if (tabstitch) tabstitch.classList.toggle('on', m === 'stitch');
   tabgrid.classList.toggle('on', m === 'grid');
   tabfollow.classList.toggle('on', m === 'follow');
-  if (m === 'stitch') { vids.forEach(v => v.pause()); sv.play().catch(() => {}); }
-  else { if (sv) sv.pause(); startGrid(); }
+  // The timestamp crosses with you: stitched and clip timelines are
+  // the same clock.
+  if (m === 'stitch') {
+    const t = master();
+    vids.forEach(v => v.pause());
+    if (t > 0) sv.currentTime = t;
+    sv.play().catch(() => {});
+  } else {
+    if (sv) sv.pause();
+    startGrid();
+    if (wasStitch && sv && sv.currentTime > 0) vids.forEach(v => { v.currentTime = sv.currentTime; });
+  }
   paint();
 }
 tabgrid.onclick = () => setMode('grid');
@@ -744,7 +757,32 @@ if (sv) {
     for (const g of edl) if (g.s <= sv.currentTime && sv.currentTime < g.e) { c = g.c; break; }
     stitchcam.textContent = c;
   });
-  setMode('stitch');
+  if (sv.getAttribute('src')) setMode('stitch');
+}
+const stitching = document.getElementById('stitching');
+if (sv && !sv.getAttribute('src')) {
+  // A render was queued for this event: poll until it exists, then
+  // offer the switch (no reload, same timestamp).
+  const url = '/house/stitch/{{.ID}}?v=lo';
+  let tries = 0;
+  const poll = setInterval(async () => {
+    if (++tries > 100) { clearInterval(poll); return; }
+    let ok = false;
+    try { ok = (await fetch(url, { method: 'HEAD' })).ok; } catch {}
+    if (!ok) return;
+    clearInterval(poll);
+    sv.src = url;
+    if (tabstitch) tabstitch.style.display = '';
+    const dl = document.getElementById('stitchdl');
+    if (dl) dl.innerHTML = '<a href="' + url + '" download="curtilage-{{.ID}}.mp4">download</a>';
+    if (stitching) {
+      stitching.textContent = '';
+      const b = document.createElement('button');
+      b.textContent = 'stitched view ready';
+      b.onclick = () => { setMode('stitch'); b.remove(); };
+      stitching.appendChild(b);
+    }
+  }, 3000);
 }
 if (stitchhd) stitchhd.onclick = () => {
   const t = sv.currentTime, wasPlaying = !sv.paused;

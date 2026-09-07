@@ -210,8 +210,14 @@ func TestOccupancyRedCar(t *testing.T) {
 			if c.Event.Zones[0] != "right_parking_space" {
 				t.Errorf("departure from %v, want right_parking_space", c.Event.Zones)
 			}
-			if c.Event.StartedAt.Before(time.Date(2026, 8, 30, 22, 25, 0, 0, time.UTC)) {
-				t.Errorf("departure at %s, before the grace could have elapsed", c.Event.StartedAt.Format("15:04:05"))
+			// Believed only after the grace, but ANCHORED at the last
+			// sighting -- the clip shows the drive-off, not five quiet
+			// minutes later (the red car was last covered 22:22:20).
+			if want := time.Date(2026, 8, 30, 22, 22, 20, 0, time.UTC); c.Event.StartedAt.Sub(want).Abs() > 30*time.Second {
+				t.Errorf("departure anchored at %s, want ~%s (the last sighting)", c.Event.StartedAt.Format("15:04:05"), want.Format("15:04:05"))
+			}
+			if c.Event.Camera == "" {
+				t.Error("departure without its remembered camera")
 			}
 		case KindArrival:
 			if c.Event.StartedAt.After(warm) {

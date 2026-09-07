@@ -82,6 +82,11 @@ type ledger struct {
 	since      time.Time // when present last rose
 	lastSeen   time.Time // last moment raw sightings covered present
 	belowSince time.Time // raw count has been under present since; zero if not
+	// Who last covered the ledger: the departure event's camera and
+	// snapshot, remembered because by the time a departure is BELIEVED
+	// (DepartAfter later) the track is long gone from the table.
+	seenCamera, seenSource string
+	seenSnapshot           bool
 }
 
 // ZoneState is one ledger, for the house page and (later) MQTT out.
@@ -238,8 +243,9 @@ func iou(a, b []float64) float64 {
 
 // counts is (qualified, raw) for one ledger at at: qualified tracks
 // have held the zone for ArriveAfter; raw is any current sighting.
-// Both are max over cameras.
-func (o *Occupancy) counts(l *ledger, at time.Time) (qualified, raw int) {
+// Both are max over cameras.  covering is one of the counted tracks
+// (any), for the ledger's who-was-last-here bookkeeping.
+func (o *Occupancy) counts(l *ledger, at time.Time) (qualified, raw int, covering *occTrack) {
 	perCamQ, perCamR := map[string]int{}, map[string]int{}
 	for _, tr := range o.tracks {
 		if tr.label != l.label {
@@ -249,6 +255,7 @@ func (o *Occupancy) counts(l *ledger, at time.Time) (qualified, raw int) {
 		if !ok {
 			continue
 		}
+		covering = tr
 		perCamR[tr.camera]++
 		if at.Sub(ent) >= l.watch.ArriveAfter {
 			perCamQ[tr.camera]++
@@ -260,18 +267,19 @@ func (o *Occupancy) counts(l *ledger, at time.Time) (qualified, raw int) {
 	for _, n := range perCamR {
 		raw = max(raw, n)
 	}
-	return qualified, raw
+	return qualified, raw, covering
 }
 
 // tick advances every ledger and returns the transitions.
 func (o *Occupancy) tick(at time.Time) []Change {
 	var changes []Change
 	for _, l := range o.ledgers {
-		q, raw := o.counts(l, at)
+		q, raw, covering := o.counts(l, at)
 		if raw >= l.present {
 			l.belowSince = time.Time{}
 			if raw > 0 {
 				l.lastSeen = at
+				l.seenCamera, l.seenSource, l.seenSnapshot = covering.camera, covering.source, covering.snapshot
 			}
 		} else if l.belowSince.IsZero() {
 			l.belowSince = at
@@ -307,6 +315,18 @@ func (o *Occupancy) event(l *ledger, at time.Time, kind Kind) Event {
 		EndedAt:   at,
 		Clip:      ClipFinal, // the recording-range clip around the moment
 	}
+	if kind == KindDeparture && !l.lastSeen.IsZero() {
+		// A departure is BELIEVED DepartAfter late; the thing to see
+		// happened at lastSeen -- the pickup, the drive-off -- and the
+		// witness left the track table long ago.  Anchor the clip
+		// there, on the ledger's remembered camera.
+		ev.StartedAt, ev.EndedAt = l.lastSeen, l.lastSeen
+		if l.seenCamera != "" {
+			ev.Camera, ev.SourceID, ev.HasSnapshot = l.seenCamera, l.seenSource, l.seenSnapshot
+			ev.Cameras = []string{l.seenCamera}
+			ev.SourceIDs = []string{l.seenSource}
+		}
+	}
 	for _, tr := range o.tracks {
 		if tr.label != l.label {
 			continue
@@ -314,9 +334,9 @@ func (o *Occupancy) event(l *ledger, at time.Time, kind Kind) Event {
 		if _, ok := tr.entered[l.watch.Zone]; !ok {
 			continue
 		}
-		ev.Camera = tr.camera
-		ev.SourceID = tr.source
-		ev.HasSnapshot = tr.snapshot
+		if ev.Camera == "" {
+			ev.Camera, ev.SourceID, ev.HasSnapshot = tr.camera, tr.source, tr.snapshot
+		}
 		if ev.Plate == "" {
 			ev.Plate = tr.plate
 		}
