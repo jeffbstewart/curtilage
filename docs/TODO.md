@@ -15,12 +15,19 @@ record, this is the wish list.  Date each entry.
   follow-up replace the alert in place and a background push can
   clear it; design this into the notifier when that phase lands.
   Start with the one plate, expand if it earns it.
-- **Bear pierces do-not-disturb** (2026-08-31).  bear is tracked on
-  every camera (there are bears in town).  A bear detection is an
-  alarm-class event that must blast through DND: iOS critical alerts
-  (needs Apple's entitlement -- apply early, approval is slow) or at
-  minimum time-sensitive interruption level.  Until the app exists it
-  surfaces on the house page like everything else.
+- **Bear pierces do-not-disturb** (2026-08-31; DEFERRED 2026-09-07).
+  bear is tracked on every camera (there are bears in town).  A bear
+  detection is an alarm-class event that would blast through DND: iOS
+  critical alerts (needs Apple's entitlement) or at minimum
+  time-sensitive interruption level.  Deferred, entitlement
+  application included, the day the FIRST bear the system ever cried
+  was a shadow on the ground at 79%: a critical alert is a trust
+  instrument, and one 2am false BEAR gets the feature -- and the
+  family's faith in every lesser notification -- turned off.  Sat on
+  until the detector has earned it: a run of true positives (or at
+  least an absence of false ones) across seasons and light, judged by
+  the household, not a threshold.  Until then a bear surfaces as a
+  sighting like today's did, which worked.
 - **Packages** (2026-08-31).  package is tracked on porch-east/down/
   west, driveway-down and driveway-winchester.  Zones' object lists
   must include package before those events get zoned (UI edit, then
