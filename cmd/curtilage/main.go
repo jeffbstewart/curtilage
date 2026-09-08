@@ -438,6 +438,7 @@ func pruneHourly(ctx context.Context, st *store.Store, dir string) {
 func adminMux(rotator *record.Rotator, st *store.Store, api *server.Server) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", rootPage(api)) // exactly "/": everything else unknown stays a 404
+	mux.HandleFunc("GET /enroll", enrollPage(api))
 	mux.Handle("/metrics", metrics.Handler(version, st))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })
 	if api != nil {
@@ -605,6 +606,51 @@ func rootPage(api *server.Server) http.HandlerFunc {
 		}
 	}
 }
+
+// enrollPage catches a person who scanned an enrollment QR with the
+// phone's CAMERA instead of the app: the camera opens this URL in a
+// browser, and the page explains what to do instead.  Enrollment
+// itself never happens over HTTP -- the app reads the secret from the
+// URL fragment (which a browser never transmits, so this page has
+// seen nothing) and calls the gRPC Enroll.  Nothing here needs a
+// gate: the page carries no data.
+func enrollPage(api *server.Server) http.HandlerFunc {
+	name := "curtilage"
+	if api != nil && api.DisplayName != "" {
+		name = api.DisplayName
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if err := enrollTmpl.Execute(w, struct{ Name string }{name}); err != nil {
+			log.Printf("enroll: render: %v", err)
+		}
+	}
+}
+
+// TODO: the app's App Store name and link land here when the app
+// ships; "the Curtilage app" is the placeholder.
+var enrollTmpl = template.Must(template.New("enroll").Parse(`<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Name}}: enroll this device</title>
+<style>
+ body { font: 16px/1.5 system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; padding: 0 1rem; color: #222; background: #fafafa; }
+ h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+ .hint { color: #666; }
+</style>
+<h1>Almost -- wrong scanner</h1>
+<p>That QR code enrolls a device with <b>{{.Name}}</b>, but it has to
+be scanned from inside the <b>Curtilage app</b>, not with the camera.</p>
+<ol>
+ <li>Get the Curtilage app from the App Store <span class="hint">(coming soon)</span>.</li>
+ <li>Open it, choose <b>Enroll this device</b>, and scan the QR code from there.</li>
+</ol>
+<p class="hint">The code is one use and expires a few minutes after it
+was made -- if it has been a while, ask for a fresh one.  Nothing was
+shared by opening this page.</p>
+`))
 
 var rootTmpl = template.Must(template.New("root").Parse(`<!doctype html>
 <meta charset="utf-8">
