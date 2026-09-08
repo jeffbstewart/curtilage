@@ -24,3 +24,4 @@ file:event_edl_test.go
 192.168.1.0/24
 198.51.100.0/24
 192.168.1.1
+file:admin_test.go

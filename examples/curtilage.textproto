@@ -38,6 +38,9 @@ house {
   allow_cidrs: "192.168.1.0/24"
   allow_cidrs: "198.51.100.0/24"
   trusted_proxies: "192.168.1.1"
+  # The TLS origin the reverse proxy fronts this server as: what
+  # admin passkeys bind to (/house/admin/).  Unset: no admin area.
+  admin_origin: "https://curtilage.example.net"
 }
 
 # Every time a person reads (the house page) is shown in this zone.

@@ -54,8 +54,8 @@ type Credential struct {
 // RelyingParty binds ceremonies to one origin: the house page's
 // exact scheme://host, from which the RP id (the host) follows.
 type RelyingParty struct {
-	Origin string // "https://curtilage.home.stewart.net"
-	ID     string // "curtilage.home.stewart.net"
+	Origin string // "https://curtilage.example.net"
+	ID     string // "curtilage.example.net"
 }
 
 // authenticator data flags.

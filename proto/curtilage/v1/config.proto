@@ -114,6 +114,11 @@ message House {
   // The caller is then the rightmost forwarded address that is not
   // itself a trusted proxy.  Empty: the header is ignored entirely.
   repeated string trusted_proxies = 2;
+  // The canonical TLS origin the reverse proxy fronts this server as,
+  // e.g. "https://curtilage.example.net": what admin passkeys
+  // are cryptographically bound to (WebAuthn Relying Party).  The pod
+  // cannot know its own public name.  Unset: no admin area.
+  string admin_origin = 3;
 }
 
 message Frigate {

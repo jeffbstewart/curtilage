@@ -336,7 +336,7 @@ func httpServer(cfg *curtilagev1.Config, st *store.Store, rotator *record.Rotato
 	}
 	mux.Handle("/house/", &house.Handler{Store: st, API: api, Allow: allow, Proxies: proxies,
 		DisplayName: cfg.DisplayName, Location: config.Location(cfg), Version: version, PR: prnum, Built: built,
-		Occupancy: occ, States: states})
+		Occupancy: occ, States: states, AdminOrigin: cfg.GetHouse().GetAdminOrigin()})
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			gs.ServeHTTP(w, r)
