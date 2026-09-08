@@ -65,6 +65,23 @@ func TestRotateEndpoint(t *testing.T) {
 	}
 }
 
+// The camera-scan catch page: ungated, explains the app, and leaks
+// nothing (the secret lives in a fragment browsers never send).
+func TestEnrollPage(t *testing.T) {
+	srv := httptest.NewServer(adminMux(nil, nil, nil))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/enroll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "App Store") ||
+		!strings.Contains(string(body), "not with the camera") {
+		t.Fatalf("enroll page -> %d %.200s", resp.StatusCode, body)
+	}
+}
+
 func TestRotateEndpointWithoutRecording(t *testing.T) {
 	srv := httptest.NewServer(adminMux(nil, nil, nil))
 	defer srv.Close()
