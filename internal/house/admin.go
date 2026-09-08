@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	qrcode "github.com/skip2/go-qrcode"
+
 	"github.com/jeffbstewart/curtilage/internal/webauthn"
 )
 
@@ -98,7 +100,20 @@ func (h *Handler) admin(w http.ResponseWriter, r *http.Request, rest string) {
 			return
 		}
 		secret := h.API.Devices.MintEnrollment(h.now())
-		writeJSON(w, map[string]string{"secret": secret, "ttl": "5m"})
+		// The QR carries <origin>/enroll#<secret>: the origin so the
+		// app learns where home is, the secret in the FRAGMENT so it
+		// never rides a request line into anyone's access log.  The
+		// image travels inside this response as a data URI for the
+		// same reason.
+		enrollURL := h.AdminOrigin + "/enroll#" + secret
+		png, err := qrcode.Encode(enrollURL, qrcode.Medium, 256)
+		if err != nil {
+			log.Printf("house: enroll qr: %v", err)
+			http.Error(w, "qr encoding failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]string{"secret": secret, "ttl": "5m", "url": enrollURL,
+			"qr": "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)})
 	case "session/logout":
 		if c, err := r.Cookie(adminCookie); err == nil {
 			h.adminMu.Lock()
@@ -405,8 +420,9 @@ var adminTmpl = template.Must(template.New("admin").Parse(`<!doctype html>
 {{else}}
 {{if .BackupNag}}<div class="nag">One passkey is a single point of lockout: register a <b>backup</b> (a hardware key in a drawer outlives phones and accounts).</div>{{end}}
 <h2>Enroll a device</h2>
-<p><button onclick="enroll()">mint enrollment secret</button> <span id="secretbox"></span></p>
-<p class="dim">One use, five minutes.  Type it into the app's enrollment screen; the QR arrives with the app.</p>
+<p><button onclick="enroll()">mint enrollment secret</button></p>
+<div id="secretbox"></div>
+<p class="dim">One use, five minutes.  Scan the QR from the app's enrollment screen, or type the secret.</p>
 <h2>Devices</h2>
 {{if .Devices}}<table><tr><th>Name</th><th>Enrolled</th><th>Last seen</th><th></th></tr>
 {{range .Devices}}<tr><td>{{.Name}}</td><td>{{.Enrolled}}</td><td>{{.LastSeen}}</td><td>{{if .Revoked}}<span class="dim">revoked</span>{{else}}<button onclick="revoke('{{.ID}}')">revoke</button>{{end}}</td></tr>
@@ -459,7 +475,9 @@ async function login(){
 async function enroll(){
   try {
     const r = await post('enroll');
-    document.getElementById('secretbox').innerHTML = '<span class="secret">'+r.secret+'</span> (one use, '+r.ttl+')';
+    document.getElementById('secretbox').innerHTML =
+      '<div><img src="'+r.qr+'" alt="enrollment QR" width="256" height="256"></div>' +
+      '<span class="secret">'+r.secret+'</span> (one use, '+r.ttl+')';
   } catch (e) { alert(e); }
 }
 async function revoke(id){ if (confirm('Revoke this device?')) { try { await post('device/revoke', {id}); location.reload(); } catch (e) { alert(e); } } }

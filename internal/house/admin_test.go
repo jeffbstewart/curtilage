@@ -134,8 +134,18 @@ func TestAdminLifecycle(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("enroll -> %d %s", code, body)
 	}
-	var minted struct{ Secret string }
+	var minted struct{ Secret, URL, QR string }
 	json.Unmarshal([]byte(body), &minted)
+	// The QR is a real PNG data URI of <origin>/enroll#<secret> --
+	// origin so the app learns home, the secret in the fragment so it
+	// never rides a request line.
+	if minted.URL != adminOrigin+"/enroll#"+minted.Secret {
+		t.Fatalf("enroll url: %q", minted.URL)
+	}
+	png, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(minted.QR, "data:image/png;base64,"))
+	if err != nil || len(png) < 8 || string(png[1:4]) != "PNG" {
+		t.Fatalf("qr is not a png (%d bytes, %v)", len(png), err)
+	}
 	dev, _, err := h.API.Devices.Enroll(minted.Secret, "test phone", h.Now())
 	if err != nil {
 		t.Fatalf("minted secret did not enroll: %v", err)
