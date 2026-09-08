@@ -432,8 +432,13 @@ type House struct {
 	// The caller is then the rightmost forwarded address that is not
 	// itself a trusted proxy.  Empty: the header is ignored entirely.
 	TrustedProxies []string `protobuf:"bytes,2,rep,name=trusted_proxies,json=trustedProxies,proto3" json:"trusted_proxies,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The canonical TLS origin the reverse proxy fronts this server as,
+	// e.g. "https://curtilage.example.net": what admin passkeys
+	// are cryptographically bound to (WebAuthn Relying Party).  The pod
+	// cannot know its own public name.  Unset: no admin area.
+	AdminOrigin   string `protobuf:"bytes,3,opt,name=admin_origin,json=adminOrigin,proto3" json:"admin_origin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *House) Reset() {
@@ -478,6 +483,13 @@ func (x *House) GetTrustedProxies() []string {
 		return x.TrustedProxies
 	}
 	return nil
+}
+
+func (x *House) GetAdminOrigin() string {
+	if x != nil {
+		return x.AdminOrigin
+	}
+	return ""
 }
 
 type Frigate struct {
@@ -772,11 +784,12 @@ const file_curtilage_v1_config_proto_rawDesc = "" +
 	"\x06labels\x18\x02 \x03(\tR\x06labels\x12<\n" +
 	"\farrive_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\varriveAfter\x12<\n" +
 	"\fdepart_after\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\vdepartAfter\x12\x14\n" +
-	"\x05quiet\x18\x05 \x01(\bR\x05quiet\"Q\n" +
+	"\x05quiet\x18\x05 \x01(\bR\x05quiet\"t\n" +
 	"\x05House\x12\x1f\n" +
 	"\vallow_cidrs\x18\x01 \x03(\tR\n" +
 	"allowCidrs\x12'\n" +
-	"\x0ftrusted_proxies\x18\x02 \x03(\tR\x0etrustedProxies\"\x1b\n" +
+	"\x0ftrusted_proxies\x18\x02 \x03(\tR\x0etrustedProxies\x12!\n" +
+	"\fadmin_origin\x18\x03 \x01(\tR\vadminOrigin\"\x1b\n" +
 	"\aFrigate\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"4\n" +
 	"\x05Links\x12+\n" +

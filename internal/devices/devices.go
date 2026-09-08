@@ -106,19 +106,40 @@ func (r *Registry) Armed() bool {
 	return false
 }
 
+// maxPending caps live enrollment secrets: past it, minting another
+// evicts the oldest.  A mashed mint button cannot grow the set.
+const maxPending = 8
+
 // MintEnrollment creates a one-use enrollment secret, valid briefly.
 // The admin's passkey session calls this; the secret rides the QR.
 func (r *Registry) MintEnrollment(now time.Time) string {
 	secret := randToken(16)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for s, p := range r.pending { // sweep the stale on the way through
+	r.sweepPending(now)
+	for len(r.pending) >= maxPending {
+		oldest, at := "", time.Time{}
+		for s, p := range r.pending {
+			if at.IsZero() || p.expires.Before(at) {
+				oldest, at = s, p.expires
+			}
+		}
+		delete(r.pending, oldest)
+	}
+	r.pending[secret] = pending{expires: now.Add(enrollTTL)}
+	return secret
+}
+
+// sweepPending drops expired secrets; callers hold mu.  It runs on
+// every mint AND every enrollment attempt, so expired secrets cannot
+// outlive the next touch of the enrollment machinery -- and the set
+// is bounded by maxPending regardless.
+func (r *Registry) sweepPending(now time.Time) {
+	for s, p := range r.pending {
 		if now.After(p.expires) {
 			delete(r.pending, s)
 		}
 	}
-	r.pending[secret] = pending{expires: now.Add(enrollTTL)}
-	return secret
 }
 
 // Enroll consumes a secret and mints the device's bearer token --
@@ -126,6 +147,7 @@ func (r *Registry) MintEnrollment(now time.Time) string {
 func (r *Registry) Enroll(secret, name string, now time.Time) (Device, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.sweepPending(now)
 	p, ok := r.pending[secret]
 	if !ok || now.After(p.expires) {
 		return Device{}, "", fmt.Errorf("devices: enrollment secret is not valid")

@@ -62,7 +62,7 @@ func cborMap(items ...kv) []byte {
 	return h
 }
 
-var rp = RelyingParty{Origin: "https://curtilage.home.stewart.net", ID: "curtilage.home.stewart.net"}
+var rp = RelyingParty{Origin: "https://curtilage.example.net", ID: "curtilage.example.net"}
 
 func clientDataJSON(typ string, challenge []byte, origin string) []byte {
 	b, _ := json.Marshal(map[string]string{

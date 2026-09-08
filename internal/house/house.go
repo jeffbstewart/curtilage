@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	curtilagev1 "github.com/jeffbstewart/curtilage/gen/curtilage/v1"
@@ -54,6 +55,13 @@ type Handler struct {
 	States *policy.States
 	// Now is time.Now unless a test says otherwise.
 	Now func() time.Time
+	// AdminOrigin is the canonical TLS origin the proxy fronts this
+	// server as -- what admin passkeys bind to (admin.go).  Empty: no
+	// admin area.
+	AdminOrigin string
+
+	adminMu    sync.Mutex
+	adminState *adminState
 }
 
 func (h *Handler) loc() *time.Location {
@@ -194,6 +202,12 @@ type count struct {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.Allowed(r) {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// The admin area routes before the page-wide GET gate: its
+	// ceremonies POST (and it polices its own methods).
+	if rest, ok := strings.CutPrefix(r.URL.Path, "/house/admin"); ok {
+		h.admin(w, r, rest)
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -397,7 +411,7 @@ var tmpl = template.Must(template.New("house").Parse(`<!doctype html>
 </style>
 <h1>{{.DisplayName}}: the last {{.Hours}} hours</h1>
 <div class="sub">{{.Since}} to {{.Now}} ({{.Zone}}). {{.Total}} events, {{.Live}} still running. Newest first. Audience is what the policy engine sent, or would have sent, to whom.
-{{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}}</div>
+{{if .All}}Showing <b>everything</b> that touched a zone ({{.Hidden}} unzoned hidden). <a href="?hours={{.Hours}}">Show only what was sent</a>.{{else}}Showing what was sent; <b>{{.Hidden}}</b> unsent or unzoned are hidden. <a href="?hours={{.Hours}}&amp;view=all">Show everything</a>.{{end}} <a href="/house/admin/">Admin</a>.</div>
 <div class="sum">
  {{if .Presence}}<div><b>Parked</b>{{range .Presence}}{{.Zone}}: {{.State}}<br>{{end}}</div>{{end}}
  {{if .StateLines}}<div><b>State</b>{{range .StateLines}}{{.Zone}}: {{.State}}<br>{{end}}</div>{{end}}

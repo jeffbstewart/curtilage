@@ -85,6 +85,43 @@ func TestEnrollAuthenticateRevoke(t *testing.T) {
 	}
 }
 
+// Enrollment secrets have a horizon and cannot accumulate: expired
+// ones are swept on every mint and every enrollment attempt, and the
+// live set is capped -- past the cap, minting evicts the oldest.
+func TestEnrollmentSecretsCannotAccumulate(t *testing.T) {
+	r, _ := New("")
+	t0 := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	stale := r.MintEnrollment(t0)
+	if n := len(r.pending); n != 1 {
+		t.Fatalf("pending: %d", n)
+	}
+	// Long after expiry, ANY enrollment attempt sweeps it out.
+	if _, _, err := r.Enroll("wrong", "x", t0.Add(time.Hour)); err == nil {
+		t.Fatal("bogus secret enrolled")
+	}
+	if n := len(r.pending); n != 0 {
+		t.Fatalf("expired secret survived the sweep: %d pending", n)
+	}
+	if _, _, err := r.Enroll(stale, "late", t0.Add(time.Hour)); err == nil {
+		t.Fatal("swept secret still worked")
+	}
+	// The live set is capped: minting past it evicts the oldest, and
+	// the newest cap's worth still work.
+	var secrets []string
+	for i := range maxPending + 3 {
+		secrets = append(secrets, r.MintEnrollment(t0.Add(time.Duration(i)*time.Second)))
+	}
+	if n := len(r.pending); n != maxPending {
+		t.Fatalf("pending after burst: %d, cap %d", n, maxPending)
+	}
+	if _, _, err := r.Enroll(secrets[0], "evicted", t0.Add(time.Minute)); err == nil {
+		t.Fatal("evicted secret worked")
+	}
+	if _, _, err := r.Enroll(secrets[len(secrets)-1], "newest", t0.Add(time.Minute)); err != nil {
+		t.Fatalf("newest secret: %v", err)
+	}
+}
+
 func TestForget(t *testing.T) {
 	r, _ := New("")
 	t0 := time.Date(2026, 9, 7, 22, 0, 0, 0, time.UTC)
